@@ -1,12 +1,11 @@
 # ES-PI3-2026-T2-G02
 
 ## Integrantes
-- Demetrius Valverde
-- Giovana Uchelli
-- Lucas Kendi
-- Matheus Rosini
-- Pedro André
-
+- Demetrius Valverde -25015035
+- Giovana Uchelli - 25008818
+- Lucas Kendi - 25014845
+- Matheus Rosini - 25015832
+- Pedro André - 25018639
 
 ## Descrição do Projeto
 
