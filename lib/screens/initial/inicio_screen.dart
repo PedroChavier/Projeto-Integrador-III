@@ -11,6 +11,8 @@ class InicioScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+
+      //SafeArea evita que o conteudo fique em areas problematicas
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -38,6 +40,7 @@ class InicioScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 16, color: Colors.black87),
                 ),
               ),
+              //espaço fixo de 16 px entre os elemnetos
               const SizedBox(height: 16),
               Row(
                 children: const [
