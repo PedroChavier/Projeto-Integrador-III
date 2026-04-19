@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'password_recovery_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -180,25 +181,34 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 10),
 
               // Esqueceu a senha
+              // DEPOIS
               Align(
                 alignment: Alignment.centerRight,
-                child: RichText(
-                  text: const TextSpan(
-                    text: 'Esqueceu sua senha? ',
-                    style: TextStyle(
-                      color: Colors.black45,
-                      fontSize: 13,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Clique aqui',
-                        style: TextStyle(
-                          color: Color(0xFF6C63FF),
-                          fontWeight: FontWeight.w600,
-                          decoration: TextDecoration.underline,
-                        ),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RecuperarSenhaScreen()),
+                    );
+                  },
+                  child: RichText(
+                    text: const TextSpan(
+                      text: 'Esqueceu sua senha? ',
+                      style: TextStyle(
+                        color: Colors.black45,
+                        fontSize: 13,
                       ),
-                    ],
+                      children: [
+                        TextSpan(
+                          text: 'Clique aqui',
+                          style: TextStyle(
+                            color: Color(0xFF6C63FF),
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
