@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "10828870442",
+    "project_id": "mesclainvest-34c45",
+    "storage_bucket": "mesclainvest-34c45.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:10828870442:android:8d6994536e5c404508e453",
+        "android_client_info": {
+          "package_name": "com.example.mescla_invest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3Gql6v5AzsYmHC8OKyMPi92ZKOiaSUTU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

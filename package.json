@@ -1,0 +1,34 @@
+{
+  "name": "es-pi3-2026-t2-g02",
+  "version": "1.0.0",
+  "description": "Projeto desenvolvido para a disciplina **Projeto Integrador 3**.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "flutter run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giovanauchelli/ES-PI3-2026-T2-G02.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/giovanauchelli/ES-PI3-2026-T2-G02/issues"
+  },
+  "homepage": "https://github.com/giovanauchelli/ES-PI3-2026-T2-G02#readme",
+  "devDependencies": {
+    "firebase-tools": "^15.15.0",
+    "@types/node": "^25.3.0",
+    "npm": "^11.11.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
