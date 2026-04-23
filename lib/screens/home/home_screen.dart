@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../startups/startups_catalog_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -109,7 +110,7 @@ class _Header extends StatelessWidget {
         const Text(
           'Olá, Ana',
           style: TextStyle(
-            fontSize: 26,
+            fontSize: 28,
             fontWeight: FontWeight.w700,
             color: Colors.black87,
           ),
@@ -359,21 +360,34 @@ class _BottomNav extends StatelessWidget {
           ),
         ],
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: const [
-              _NavItem(icon: Icons.home_outlined, label: 'Home', selected: true),
-              _NavItem(icon: Icons.grid_view_outlined, label: 'Startups'),
-              _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira'),
-              _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão'),
-              _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard'),
-            ],
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children:[
+                _NavItem(icon: Icons.home_outlined, label: 'Home', selected: true),
+                  GestureDetector(
+                    onTap: () => Navigator.pushReplacement(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const StartupsScreen(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    ),
+                    child: const _NavItem(
+                      icon: Icons.grid_view_outlined,
+                      label: 'Startups',
+                    ),
+                  ),
+                                  _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira'),
+                _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão'),
+                _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard'),
+              ],
+            ),
           ),
         ),
-      ),
     );
   }
 }
