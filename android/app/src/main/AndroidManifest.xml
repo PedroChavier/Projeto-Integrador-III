@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    package= "com.example.mescla_invest"
     <application
         android:label="mescla_invest"
         android:name="${applicationName}"

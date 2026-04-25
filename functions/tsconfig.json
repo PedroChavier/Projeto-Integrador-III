@@ -2,7 +2,7 @@
   "compilerOptions": {
     // File Layout
     "rootDir": "./lib/src",
-    "outDir": "./dist",
+    "outDir": "./functions/dist",
 
     // Environment Settings
     "module": "nodenext",
@@ -26,6 +26,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    
 
     // Module Options
     "verbatimModuleSyntax": true,
@@ -35,6 +36,6 @@
     "skipLibCheck": true,
 
   },
-  "include": ["lib/src/**/*"],
+  "include": ["lib/functions/src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -24,7 +24,7 @@ class InicioScreen extends StatelessWidget {
               const Spacer(flex: 3),
               OutlinedButton(
                 onPressed: () {
-                  Navigator.push( // <- adicione isso
+                  Navigator.push( 
                     context,
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                   );

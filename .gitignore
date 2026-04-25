@@ -49,3 +49,5 @@ app.*.map.json
 node_modules/
 dist/
 package-lock.json
+
+.sixth/

@@ -1,0 +1,176 @@
+=====================================
+1. Classe: Pessoa - Pai
+=====================================
+Atributos:
+  - CPF
+  - firstName
+  - lastName
+  - dataNascimento
+
+Construtor:
+  + Pessoa(CPF, firstName, lastName, dataNascimento)
+
+Métodos:
+  + getCpf() / setCpf()
+  + getFirstName() / setFirstName()
+  + getLastName() / setLastName()
+  + getDataNascimento() / setDataNascimento()
+  + calcularIdade()
+  + getNomeCompleto()
+  + validarCpf()
+
+=====================================
+2. Classe: Usuario (Herda de Pessoa)
+=====================================
+Atributos:
+  - email
+  - senha
+  - telefone
+  - mfaHabilitado
+
+Construtor:
+  + Usuario(CPF, firstName, lastName, dataNascimento, email, senha, telefone, mfaHabilitado)
+
+Métodos:
+  + getEmail() / setEmail()
+  + getSenha() / setSenha()
+  + getTelefone() / setTelefone()
+  + getMfaHabilitado() / setMfaHabilitado()
+  + cadastrarUsuario()
+  + autenticar()
+  + recuperarSenha()
+  + habilitarMFA()
+
+=====================================
+3. Classe: Empresa - Pai
+=====================================
+Atributos:
+  - CNPJ
+  - nome
+  - dataCriacao
+
+Construtor:
+  + Empresa(CNPJ, nome, dataCriacao)
+
+Métodos:
+  + getCNPJ() / setCNPJ()
+  + getNome() / setNome()
+  + getDataCriacao() / setDataCriacao()
+
+=====================================
+4. Classe: Startup (Herda de Empresa)
+=====================================
+Atributos:
+  - descricao
+  - estSocietaria
+  - cptAportado
+  - totalTokensEmitidos
+  - estagioDesenvolvimento (Enum: NOVA, EM_OPERACAO, EM_EXPANSAO)
+  - sumarioExecutivo
+  - membrosConselho (Lista)
+  - linksVideos (Lista)
+
+Construtor:
+  + Startup(CNPJ, nome, dataCriacao, descricao, totalTokensEmitidos)
+
+Métodos:
+  + getDescricao() / setDescricao()
+  + getEstSocietaria() / setEstSocietaria()
+  + getCptAportado() / setCptAportado()
+  + getTotalTokensEmitidos() / setTotalTokensEmitidos()
+  + getEstagioDesenvolvimento() / setEstagioDesenvolvimento()
+  + getSumarioExecutivo() / setSumarioExecutivo()
+  + getMembrosConselho() / setMembrosConselho()
+  + getLinksVideos() / setLinksVideos()
+  + calcularParticipacaoSocios()
+
+=====================================
+5. Classe: Token
+=====================================
+Atributos:
+  - idToken
+  - idStartup
+  - valorAtual
+
+Construtor:
+  + Token(idToken, idStartup, valorAtual)
+
+Métodos:
+  + getIdToken() / setIdToken()
+  + getIdStartup() / setIdStartup()
+  + getValorAtual() / setValorAtual()
+  + calcularVariacaoDiaria()
+  + calcularVariacaoSemanal()
+  + calcularVariacaoMensal()
+  + calcularVariacaoSemestral()
+  + calcularVariacaoYTD()
+
+=====================================
+6. Classe: CarteiraDigital
+=====================================
+Atributos:
+  - idTitular
+  - saldoFicticio
+
+Construtor:
+  + CarteiraDigital(idTitular)
+
+Métodos:
+  + getIdTitular() / setIdTitular()
+  + getSaldoFicticio() / setSaldoFicticio()
+  + carregarSaldo(valor)
+  + debitarSaldo(valor)
+  + creditarSaldo(valor)
+
+=====================================
+7. Classe: OfertaNegociacao
+=====================================
+Atributos:
+  - idInvestidor
+  - idToken
+  - tipoOferta (Enum: COMPRA, VENDA)
+  - quantidadeTokens
+  - valorSugerido
+  - dataOferta
+  - status (Enum: ABERTA, CONCLUIDA, CANCELADA)
+
+Construtor:
+  + OfertaNegociacao(idInvestidor, idToken, tipoOferta, quantidadeTokens, valorSugerido)
+
+Métodos:
+  + getIdInvestidor() / setIdInvestidor()
+  + getIdToken() / setIdToken()
+  + getTipoOferta() / setTipoOferta()
+  + getQuantidadeTokens() / setQuantidadeTokens()
+  + getValorSugerido() / setValorSugerido()
+  + getDataOferta() / setDataOferta()
+  + getStatus() / setStatus()
+  + registrarOferta()
+  + cancelarOferta()
+  + concluirTransacao()
+
+=====================================
+8. Classe: Pergunta
+=====================================
+Atributos:
+  - idAutor
+  - idStartupDestino
+  - textoPergunta
+  - textoResposta
+  - isPrivada
+  - dataEnvio
+
+Construtor:
+  + Pergunta(idAutor, idStartupDestino, textoPergunta, isPrivada)
+
+Métodos:
+  + getIdAutor() / setIdAutor()
+  + getIdStartupDestino() / setIdStartupDestino()
+  + getTextoPergunta() / setTextoPergunta()
+  + getTextoResposta() / setTextoResposta()
+  + getIsPrivada() / setIsPrivada()
+  + getDataEnvio() / setDataEnvio()
+  + enviarPergunta()
+  + responderPergunta()
+  + listarPerguntasPublicas()
+  + listarPerguntasPrivadas()

@@ -1,0 +1,286 @@
+[
+  {
+    "id": "startup-001",
+    "nome": "AgroSense",
+    "descricao": "Plataforma de monitoramento agrícola inteligente que utiliza sensores IoT e análise de dados para otimizar o uso de água e defensivos em pequenas e médias propriedades rurais do interior paulista.",
+    "logoUrl": null,
+    "estagio": "EM_OPERACAO",
+    "socios": [
+      {
+        "id": "socio-001-a",
+        "nome": "Fernanda Oliveira Souza",
+        "cargo": "CEO & Co-fundadora",
+        "participacaoPercentual": 45,
+        "bio": "Engenheira Agrônoma pela ESALQ-USP com 4 anos de experiência em agricultura de precisão.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-001-b",
+        "nome": "Rafael Teixeira Moura",
+        "cargo": "CTO & Co-fundador",
+        "participacaoPercentual": 40,
+        "bio": "Engenheiro de Software formado pela PUC-Campinas, especialista em sistemas embarcados e IoT.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-001-c",
+        "nome": "Lucas Andrade Pires",
+        "cargo": "COO",
+        "participacaoPercentual": 15,
+        "bio": "Administrador com MBA em Agronegócio, responsável pela expansão comercial.",
+        "fotoUrl": null
+      }
+    ],
+    "membrosExternos": [
+      {
+        "id": "ext-001-a",
+        "nome": "Prof. Dr. Carlos Mendes",
+        "papel": "Mentor Técnico",
+        "bio": "Professor do departamento de Engenharia da PUC-Campinas, especialista em sistemas de sensoriamento."
+      }
+    ],
+    "totalTokensEmitidos": 500000,
+    "precoTokenAtual": 1.87,
+    "capitalAportado": 73500.00,
+    "sumarioExecutivo": "A AgroSense desenvolve kits de sensores plug-and-play instalados em campo que coletam dados de umidade do solo, temperatura, pH e luminosidade em tempo real. Esses dados alimentam um dashboard mobile que gera recomendações automáticas de irrigação e adubação, reduzindo o desperdício hídrico em até 35% e os custos com insumos em até 20%. O modelo de receita é SaaS com assinatura mensal por hectare monitorado.",
+    "planoDeNegocios": null,
+    "videos": [
+      {
+        "id": "video-001-a",
+        "titulo": "AgroSense – Como funciona em campo",
+        "url": "https://www.youtube.com/watch?v=exemplo001",
+        "thumbnailUrl": null,
+        "publicadoEm": "2026-01-15T10:00:00.000Z"
+      }
+    ],
+    "criadoEm": "2025-08-10T08:30:00.000Z",
+    "atualizadoEm": "2026-03-02T14:20:00.000Z"
+  },
+
+  {
+    "id": "startup-002",
+    "nome": "MedQueue",
+    "descricao": "Solução de gestão de filas e triagem inteligente para UPAs e prontos-socorros municipais, reduzindo o tempo médio de espera e priorizando automaticamente casos críticos via algoritmo clínico.",
+    "logoUrl": null,
+    "estagio": "NOVA",
+    "socios": [
+      {
+        "id": "socio-002-a",
+        "nome": "Isabela Campos Ramos",
+        "cargo": "CEO & Co-fundadora",
+        "participacaoPercentual": 50,
+        "bio": "Estudante de Medicina na PUC-Campinas, 5º ano. Idealizou o projeto após vivência em estágio hospitalar.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-002-b",
+        "nome": "Thiago Nascimento Costa",
+        "cargo": "CTO & Co-fundador",
+        "participacaoPercentual": 50,
+        "bio": "Engenheiro de Software pela PUC-Campinas, experiência em desenvolvimento de sistemas web e mobile.",
+        "fotoUrl": null
+      }
+    ],
+    "membrosExternos": [
+      {
+        "id": "ext-002-a",
+        "nome": "Dra. Patrícia Alves Ferreira",
+        "papel": "Consultora Médica",
+        "bio": "Médica emergencista com 12 anos de atuação em prontos-socorros do SUS na região de Campinas."
+      },
+      {
+        "id": "ext-002-b",
+        "nome": "Marcos Vinícius Leite",
+        "papel": "Mentor de Negócios",
+        "bio": "Empreendedor serial com duas startups de healthtech aceleradas no ecossistema Mescla."
+      }
+    ],
+    "totalTokensEmitidos": 200000,
+    "precoTokenAtual": 0.52,
+    "capitalAportado": 8200.00,
+    "sumarioExecutivo": "O MedQueue é um sistema web e mobile que substitui a triagem manual em papel por um fluxo digital baseado no Protocolo de Manchester adaptado. O recepcionista insere os sintomas do paciente e o algoritmo calcula automaticamente a prioridade de atendimento, gera uma senha colorida (vermelho, laranja, amarelo, verde, azul) e exibe o painel de chamada em tempo real. O MVP já foi validado em simulação com a equipe de enfermagem da UPA Ouro Verde em Campinas.",
+    "planoDeNegocios": null,
+    "videos": [],
+    "criadoEm": "2026-02-01T09:00:00.000Z",
+    "atualizadoEm": "2026-03-10T11:45:00.000Z"
+  },
+
+  {
+    "id": "startup-003",
+    "nome": "RepassaAí",
+    "descricao": "Marketplace de moda circular focado em estudantes universitários, permitindo compra, venda e troca de roupas seminovas de forma rápida e segura dentro do ecossistema das universidades parceiras.",
+    "logoUrl": null,
+    "estagio": "EM_EXPANSAO",
+    "socios": [
+      {
+        "id": "socio-003-a",
+        "nome": "Giovanna Martins Pereira",
+        "cargo": "CEO & Co-fundadora",
+        "participacaoPercentual": 35,
+        "bio": "Designer de Moda e empreendedora. Lançou a primeira versão do app com recursos próprios em 2024.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-003-b",
+        "nome": "Eduardo Lima Carvalho",
+        "cargo": "CPO & Co-fundador",
+        "participacaoPercentual": 30,
+        "bio": "UX Designer com passagem por startups de e-commerce. Responsável pelo produto e experiência do usuário.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-003-c",
+        "nome": "Beatriz Rocha Almeida",
+        "cargo": "CMO",
+        "participacaoPercentual": 20,
+        "bio": "Especialista em marketing digital e growth hacking para o segmento de moda sustentável.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-003-d",
+        "nome": "Vinícius Santos Duarte",
+        "cargo": "CTO",
+        "participacaoPercentual": 15,
+        "bio": "Engenheiro de Software focado em desenvolvimento mobile com Flutter e infraestrutura cloud.",
+        "fotoUrl": null
+      }
+    ],
+    "membrosExternos": [
+      {
+        "id": "ext-003-a",
+        "nome": "Ana Paula Guimarães",
+        "papel": "Conselheira",
+        "bio": "Ex-diretora de marketplace de uma das maiores plataformas de e-commerce do Brasil."
+      }
+    ],
+    "totalTokensEmitidos": 1000000,
+    "precoTokenAtual": 3.41,
+    "capitalAportado": 215000.00,
+    "sumarioExecutivo": "O RepassaAí opera como um marketplace C2C de moda circular com foco exclusivo no público universitário. A plataforma conta com verificação de qualidade por fotos, sistema de reputação bidirecional, chat integrado e pagamento seguro via carteira digital interna. Atualmente presente em 6 universidades de Campinas e São Paulo com mais de 4.200 usuários ativos e ticket médio de R$ 58,00. A expansão prevista para 2026 inclui mais 15 campi e integração com serviço de logística reversa.",
+    "planoDeNegocios": null,
+    "videos": [
+      {
+        "id": "video-003-a",
+        "titulo": "RepassaAí – Pitch Mescla Demo Day 2025",
+        "url": "https://www.youtube.com/watch?v=exemplo003a",
+        "thumbnailUrl": null,
+        "publicadoEm": "2025-11-20T18:00:00.000Z"
+      },
+      {
+        "id": "video-003-b",
+        "titulo": "Como vender sua primeira peça no RepassaAí",
+        "url": "https://www.youtube.com/watch?v=exemplo003b",
+        "thumbnailUrl": null,
+        "publicadoEm": "2026-01-08T12:00:00.000Z"
+      }
+    ],
+    "criadoEm": "2024-06-15T07:00:00.000Z",
+    "atualizadoEm": "2026-03-18T16:30:00.000Z"
+  },
+
+  {
+    "id": "startup-004",
+    "nome": "EduPath",
+    "descricao": "Plataforma adaptativa de preparação para vestibulares e ENEM que gera trilhas de estudo personalizadas com base no desempenho individual do aluno, priorizando os temas com maior impacto na nota final.",
+    "logoUrl": null,
+    "estagio": "EM_OPERACAO",
+    "socios": [
+      {
+        "id": "socio-004-a",
+        "nome": "Pedro Henrique Fonseca",
+        "cargo": "CEO & Co-fundador",
+        "participacaoPercentual": 40,
+        "bio": "Licenciado em Matemática e ex-professor de cursinho pré-vestibular por 3 anos.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-004-b",
+        "nome": "Mariana Castro Freitas",
+        "cargo": "CTO & Co-fundadora",
+        "participacaoPercentual": 40,
+        "bio": "Engenheira de Software pela Unicamp, especializada em machine learning aplicado à educação.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-004-c",
+        "nome": "André Felipe Monteiro",
+        "cargo": "Head de Conteúdo",
+        "participacaoPercentual": 20,
+        "bio": "Pedagogo com experiência em curadoria de conteúdo educacional digital para plataformas EdTech.",
+        "fotoUrl": null
+      }
+    ],
+    "membrosExternos": [
+      {
+        "id": "ext-004-a",
+        "nome": "Prof. Me. Sílvio Rodrigues",
+        "papel": "Mentor Acadêmico",
+        "bio": "Professor de Ciências da Computação da PUC-Campinas com pesquisa em sistemas de recomendação."
+      },
+      {
+        "id": "ext-004-b",
+        "nome": "Julia Hoffman",
+        "papel": "Investidora-Anjo",
+        "bio": "Fundadora de uma edtech com atuação em 5 países da América Latina."
+      }
+    ],
+    "totalTokensEmitidos": 750000,
+    "precoTokenAtual": 2.15,
+    "capitalAportado": 132000.00,
+    "sumarioExecutivo": "O EduPath analisa o histórico de respostas do aluno em simulados e listas de exercícios para identificar padrões de erro e lacunas de conhecimento. Com base nessa análise, o algoritmo gera uma trilha de estudo semanal personalizada, sugerindo vídeo-aulas, exercícios e revisões priorizados por peso na prova. O modelo freemium oferece até 30 exercícios/mês gratuitamente; o plano premium (R$ 39,90/mês) é ilimitado. Atualmente a plataforma possui 1.800 alunos ativos com taxa de retenção mensal de 71%.",
+    "planoDeNegocios": null,
+    "videos": [
+      {
+        "id": "video-004-a",
+        "titulo": "EduPath – Demonstração da trilha personalizada",
+        "url": "https://www.youtube.com/watch?v=exemplo004",
+        "thumbnailUrl": null,
+        "publicadoEm": "2025-09-05T14:00:00.000Z"
+      }
+    ],
+    "criadoEm": "2025-03-22T10:00:00.000Z",
+    "atualizadoEm": "2026-02-28T09:15:00.000Z"
+  },
+
+  {
+    "id": "startup-005",
+    "nome": "FixBike",
+    "descricao": "Rede de mecânicos de bicicleta credenciados que realizam atendimento domiciliar sob demanda via aplicativo, voltada para ciclistas urbanos que buscam praticidade e transparência no preço do serviço.",
+    "logoUrl": null,
+    "estagio": "NOVA",
+    "socios": [
+      {
+        "id": "socio-005-a",
+        "nome": "Caio Ribeiro Arantes",
+        "cargo": "CEO & Co-fundador",
+        "participacaoPercentual": 50,
+        "bio": "Ciclista urbano e administrador. Teve a ideia após gastar 3 horas procurando mecânico após um furo a caminho da universidade.",
+        "fotoUrl": null
+      },
+      {
+        "id": "socio-005-b",
+        "nome": "Natália Vieira Cunha",
+        "cargo": "CTO & Co-fundadora",
+        "participacaoPercentual": 50,
+        "bio": "Engenheira de Software pela PUC-Campinas com experiência em aplicativos de marketplace e geolocalização.",
+        "fotoUrl": null
+      }
+    ],
+    "membrosExternos": [
+      {
+        "id": "ext-005-a",
+        "nome": "Roberto Paiva",
+        "papel": "Mentor de Operações",
+        "bio": "Ex-gerente de operações de uma plataforma de serviços sob demanda com atuação em 8 cidades brasileiras."
+      }
+    ],
+    "totalTokensEmitidos": 150000,
+    "precoTokenAtual": 0.38,
+    "capitalAportado": 4500.00,
+    "sumarioExecutivo": "O FixBike conecta ciclistas urbanos a mecânicos de bicicleta credenciados que realizam atendimento no endereço do cliente em até 2 horas. O app exibe o preço fixo do serviço antes da confirmação, elimina a barganha e garante rastreamento em tempo real do mecânico. Os mecânicos parceiros passam por treinamento e avaliação de qualidade. O modelo de receita é uma comissão de 20% sobre cada serviço realizado. O piloto será lançado em Campinas com 12 mecânicos credenciados e demanda estimada de 80 atendimentos/mês no primeiro trimestre.",
+    "planoDeNegocios": null,
+    "videos": [],
+    "criadoEm": "2026-02-20T11:00:00.000Z",
+    "atualizadoEm": "2026-03-15T13:00:00.000Z"
+  }
+]
