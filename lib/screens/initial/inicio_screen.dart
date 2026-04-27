@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 //importa somnete o widget MesclaInvestLogo
-import 'splash_screen.dart' show MesclaInvestLogo;
 import '../authentication/login_screen.dart';
 import '../authentication/register_screen.dart';
 
