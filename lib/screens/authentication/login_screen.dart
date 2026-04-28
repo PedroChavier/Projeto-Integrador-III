@@ -285,7 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const RecuperarSenhaScreen(),
+                              builder: (_) => const RecuperarSenhaCodigoScreen(),
                             ),
                           );
                         },
