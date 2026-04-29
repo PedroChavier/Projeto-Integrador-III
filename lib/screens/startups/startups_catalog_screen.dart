@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../home/home_screen.dart';
+import '../startups/startup_detail.dart';
 
 class StartupsScreen extends StatefulWidget {
   const StartupsScreen({super.key});
@@ -88,7 +89,6 @@ class _StartupsScreenState extends State<StartupsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Gradiente topo
             SizedBox(height: 20),
             Container(
               height: 2,
@@ -105,16 +105,14 @@ class _StartupsScreenState extends State<StartupsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                    'Startups',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black, // ou qualquer cor que quiser
+                      'Startups',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                      ),
                     ),
-                  ),
                     const SizedBox(height: 20),
-
-                    // Barra de busca
                     Container(
                       height: 46,
                       decoration: BoxDecoration(
@@ -135,8 +133,6 @@ class _StartupsScreenState extends State<StartupsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Filtros
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -147,7 +143,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
-                              color: selected ? const Color(0xFFD7DEEC) : Colors.white ,
+                              color: selected ? const Color(0xFFD7DEEC) : Colors.white,
                               borderRadius: BorderRadius.circular(30),
                               border: Border.all(
                                 color: selected ? const Color(0xFF234794) : const Color(0xFFDDDDDD),
@@ -166,8 +162,6 @@ class _StartupsScreenState extends State<StartupsScreen> {
                       }).toList(),
                     ),
                     const SizedBox(height: 20),
-
-                    // Lista de startups
                     ..._startupsFiltradas.map((startup) => Padding(
                           padding: const EdgeInsets.only(bottom: 14),
                           child: _StartupCard(
@@ -194,7 +188,6 @@ class _StartupsScreenState extends State<StartupsScreen> {
   }
 }
 
-// ── Card Startup ──────────────────────────────────────────────
 class _StartupCard extends StatelessWidget {
   final String nome;
   final String descricao;
@@ -218,76 +211,81 @@ class _StartupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const StartupDetalheScreen(),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Nome + tag
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                nome,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: tagColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: tagTextColor,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  nome,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Descrição
-          Text(
-            descricao,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Colors.black54,
-              height: 1.4,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: tagColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: tagTextColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 14),
-
-          // Métricas
-          Row(
-            children: [
-              _Metrica(label: 'Tokens', valor: tokens),
-              const SizedBox(width: 24),
-              _Metrica(label: 'Capital', valor: capital),
-              const SizedBox(width: 24),
-              _Metrica(label: 'Preço token', valor: preco),
-            ],
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              descricao,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black54,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _Metrica(label: 'Tokens', valor: tokens),
+                const SizedBox(width: 24),
+                _Metrica(label: 'Capital', valor: capital),
+                const SizedBox(width: 24),
+                _Metrica(label: 'Preço token', valor: preco),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -322,7 +320,6 @@ class _Metrica extends StatelessWidget {
   }
 }
 
-// ── Bottom Navigation ─────────────────────────────────────────
 class _BottomNav extends StatelessWidget {
   final int selected;
   const _BottomNav({this.selected = 0});
@@ -346,11 +343,11 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _NavItem(icon: Icons.home_outlined, label: 'Home', index: 0),
-              _NavItem(icon: Icons.grid_view_outlined, label: 'Startups', index: 1),
-              _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira', index: 2),
-              _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão', index: 3),
-              _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard', index: 4),
+              _NavItem(icon: Icons.home_outlined, label: 'Home', index: 0, selected: selected),
+              _NavItem(icon: Icons.grid_view_outlined, label: 'Startups', index: 1, selected: selected),
+              _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira', index: 2, selected: selected),
+              _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão', index: 3, selected: selected),
+              _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard', index: 4, selected: selected),
             ],
           ),
         ),
@@ -363,14 +360,18 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final int index;
+  final int selected;
 
   const _NavItem({
     required this.icon,
     required this.label,
     required this.index,
+    required this.selected,
   });
 
   void _navigate(BuildContext context) {
+    if (index == selected) return;
+
     if (index == 0) {
       Navigator.pushReplacement(
         context,
@@ -396,8 +397,8 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = index == 1;
-    final color = selected ? const Color(0xFF6C63FF) : Colors.black45;
+    final isSelected = index == selected;
+    final color = isSelected ? const Color(0xFF6C63FF) : Colors.black45;
 
     return GestureDetector(
       onTap: () => _navigate(context),
@@ -411,7 +412,7 @@ class _NavItem extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               color: color,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ],
