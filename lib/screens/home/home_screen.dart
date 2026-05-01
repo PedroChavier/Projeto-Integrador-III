@@ -290,8 +290,10 @@ class _AtualizacaoCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+
         color:Color.fromARGB(255, 248, 248, 253),
         borderRadius: BorderRadius.circular(12),
+        
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),

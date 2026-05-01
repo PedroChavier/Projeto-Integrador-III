@@ -46,12 +46,12 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: Column(
         children: [
           // Gradiente + seta
           Container(
-            color: const Color(0xFFF5F5F7),
+            color: const Color.fromARGB(255, 255, 255, 255),
             child: SafeArea(
               bottom: false,
               child: Column(
@@ -255,13 +255,13 @@ class SaldoConfirmadoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: Column(
         children: [
           // Gradiente topo
           SizedBox(height: 20),
           Container(
-            color:const Color(0xFFF5F5F7),
+            color:Color.fromARGB(255, 255, 255, 255),
             child: SafeArea(
               bottom: false,
               child: Container(

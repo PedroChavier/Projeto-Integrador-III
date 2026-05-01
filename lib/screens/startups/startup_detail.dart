@@ -50,20 +50,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: 20),
-                  // Gradiente
-                  Container(
-                    height: 2,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Color(0xFF6C63FF),
-                          Color(0xFFE040FB),
-                          Color(0xFFFF6B6B),
-                        ],
-                      ),
-                    ),
-                  ),
-
+                  
                   // Seta voltar
                   IconButton(
                     icon: const Icon(Icons.arrow_back,
@@ -99,7 +86,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                             Text(
                               'Agritech - IoT - Sensores',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.black45),
+                                  fontSize: 13, color: Colors.black45),
                             ),
                           ],
                         ),
@@ -137,10 +124,10 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                           children: const [
                             Text('Capital captado',
                                 style: TextStyle(
-                                    fontSize: 11, color: Colors.black45)),
+                                    fontSize: 12, color: Colors.black45)),
                             Text('R\$ 180K / 250K',
                                 style: TextStyle(
-                                    fontSize: 11, color: Colors.black45)),
+                                    fontSize: 12, color: Colors.black45)),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -159,13 +146,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                                 child: Container(
                                   height: 5,
                                   decoration: const BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Color.fromARGB(255, 49, 43, 163),
-                                        Color(0xFFE040FB),
-                                        Color(0xFFFF6B6B),
-                                      ],
-                                    ),
+                                  color:  Color.fromARGB(143, 26, 34, 126),
                                   ),
                                 ),
                               ),
@@ -185,7 +166,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                           child: OutlinedButton(
                             onPressed: () {},
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.black26),
+                              side: const BorderSide(color:  Color(0xFF1A237E)),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8)),
                               padding:
@@ -196,7 +177,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black87,
+                                color:  Color(0xFF1A237E),
                               ),
                             ),
                           ),
@@ -206,7 +187,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                           child: ElevatedButton(
                             onPressed: () {},
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color.fromARGB(255, 5, 5, 79),
+                              backgroundColor:  Color(0xFF1A237E),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8)),
                               padding:
@@ -234,9 +215,9 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                         fontSize: 13, fontWeight: FontWeight.w600),
                     unselectedLabelStyle:
                         const TextStyle(fontSize: 13),
-                    labelColor: const Color(0xFF6C63FF),
+                    labelColor:  Color(0xFF1A237E),
                     unselectedLabelColor: Colors.black45,
-                    indicatorColor: const Color(0xFF6C63FF),
+                    indicatorColor: Color.fromARGB(143, 26, 34, 126),
                     indicatorWeight: 2,
                     tabs: const [
                       Tab(text: 'Visão Geral'),

@@ -85,7 +85,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: SafeArea(
         child: Column(
           children: [
@@ -224,7 +224,7 @@ class _StartupCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Color.fromARGB(255, 248, 248, 253),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
@@ -265,12 +265,12 @@ class _StartupCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               descricao,
               style: const TextStyle(
                 fontSize: 13,
-                color: Colors.black54,
+                color: Color.fromARGB(137, 0, 0, 0),
                 height: 1.4,
               ),
             ),
