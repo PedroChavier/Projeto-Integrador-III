@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../startups/startups_catalog_screen.dart';
 import '../profile/profile_screen.dart';
+import '../wallet/wallet_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -96,7 +97,7 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: const _BottomNav(),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
     );
   }
 }
@@ -351,81 +352,54 @@ class _AtualizacaoCard extends StatelessWidget {
 }
 
 // ── Bottom Navigation ─────────────────────────────────────────
-class _BottomNav extends StatelessWidget {
-  const _BottomNav();
+class AppBottomNav extends StatelessWidget {
+  final int currentIndex;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 12,
-            offset: const Offset(0, -2),
-          ),
-        ],
+  const AppBottomNav({super.key, required this.currentIndex});
+
+  void _navigate(BuildContext context, int index) {
+    if (index == currentIndex) return;
+
+    Widget screen;
+
+    switch (index) {
+      case 0:
+        screen = const HomeScreen();
+        break;
+      case 1:
+        screen = const StartupsScreen();
+        break;
+      case 2:
+        screen = const WalletScreen();
+        break;
+      default:
+        return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => screen,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
       ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children:[
-                _NavItem(icon: Icons.home_outlined, label: 'Home', selected: true),
-                  GestureDetector(
-                    onTap: () => Navigator.pushReplacement(
-                      context,
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const StartupsScreen(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    ),
-                    child: const _NavItem(
-                      icon: Icons.grid_view_outlined,
-                      label: 'Startups',
-                    ),
-                  ),
-                _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira'),
-                _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão'),
-                _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard'),
-              ],
-            ),
-          ),
-        ),
     );
   }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    this.selected = false,
-  });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF6C63FF) : Colors.black45;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 24, color: color),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: color,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      onTap: (index) => _navigate(context, index),
+      selectedItemColor: const Color(0xFF6C63FF),
+      unselectedItemColor: Colors.black45,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.grid_view_outlined), label: 'Startups'),
+        BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Carteira'),
+        BottomNavigationBarItem(icon: Icon(Icons.swap_horiz_outlined), label: 'Balcão'),
+        BottomNavigationBarItem(icon: Icon(Icons.trending_up_outlined), label: 'DashBoard'),
       ],
     );
   }

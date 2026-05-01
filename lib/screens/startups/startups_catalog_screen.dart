@@ -183,7 +183,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const _BottomNav(selected: 1),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
     );
   }
 }
@@ -320,103 +320,3 @@ class _Metrica extends StatelessWidget {
   }
 }
 
-class _BottomNav extends StatelessWidget {
-  final int selected;
-  const _BottomNav({this.selected = 0});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 12,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavItem(icon: Icons.home_outlined, label: 'Home', index: 0, selected: selected),
-              _NavItem(icon: Icons.grid_view_outlined, label: 'Startups', index: 1, selected: selected),
-              _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira', index: 2, selected: selected),
-              _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão', index: 3, selected: selected),
-              _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard', index: 4, selected: selected),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int index;
-  final int selected;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.index,
-    required this.selected,
-  });
-
-  void _navigate(BuildContext context) {
-    if (index == selected) return;
-
-    if (index == 0) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const HomeScreen(),
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-        ),
-      );
-    }
-
-    if (index == 1) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const StartupsScreen(),
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = index == selected;
-    final color = isSelected ? const Color(0xFF6C63FF) : Colors.black45;
-
-    return GestureDetector(
-      onTap: () => _navigate(context),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 24, color: color),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
