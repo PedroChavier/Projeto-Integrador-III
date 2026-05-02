@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../startups/startups_catalog_screen.dart';
 import '../profile/profile_screen.dart';
 import '../wallet/wallet_screen.dart';
+import '../balcao/balcao_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -374,6 +375,8 @@ class AppBottomNav extends StatelessWidget {
       case 2:
         screen = const WalletScreen();
         break;
+      case 3:
+        screen = const BalcaoScreen();
       default:
         return;
     }
