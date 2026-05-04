@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import '../home/home_screen.dart';
 
 class BalcaoScreen extends StatefulWidget {
-  const BalcaoScreen({super.key});
- 
+  final int abaInicial; // 0 = comprar, 1 = vender
+
+  const BalcaoScreen({super.key, this.abaInicial = 0});
+
   @override
   State<BalcaoScreen> createState() => _BalcaoScreenState();
 }
@@ -35,6 +37,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     return qtd * preco;
   }
  
+  @override
+  void initState() {
+    super.initState();
+    _tabSelecionada = widget.abaInicial;
+  }
   @override
   void dispose() {
     _quantidadeController.dispose();

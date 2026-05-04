@@ -5,6 +5,7 @@ import '../startups/startup_society.dart';
 import '../startups/startup_documents.dart';
 import '../startups/startup_questions.dart';
 import '../home/home_screen.dart';
+import '../balcao/balcao_screen.dart';
 
 
 //Tela principal
@@ -26,6 +27,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
     super.initState();
     //inicializa o controller com 4 abas
     _tabController = TabController(length: 4, vsync: this);
+    
   }
 
   @override
@@ -164,7 +166,14 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const BalcaoScreen(abaInicial: 0),
+                                ),
+                              );
+                            },
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color:  Color(0xFF1A237E)),
                               shape: RoundedRectangleBorder(
@@ -185,7 +194,14 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                         const SizedBox(width: 10),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const BalcaoScreen(abaInicial: 1),
+                                ),
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor:  Color(0xFF1A237E),
                               shape: RoundedRectangleBorder(
