@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
 import 'password_recovery_screen.dart';
+import 'verify_otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -73,6 +74,28 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on FirebaseAuthException catch (e) {
+      // Verificar se é necessário 2FA
+      if (e.code == 'multi-factor-auth-required') {
+        // Obter o MultiFactorResolver
+        final resolver = e.resolver;
+        if (resolver != null && mounted) {
+          // Navegar para tela de verificação OTP
+          final phoneNumber = (resolver.hints.first as PhoneMultiFactorInfo)
+                  .phoneNumber ??
+              'seu telefone';
+
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => VerifyOTPScreen(
+                resolver: resolver,
+                phoneNumber: phoneNumber,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
       String mensagem = 'Erro ao fazer login';
 
       switch (e.code) {
