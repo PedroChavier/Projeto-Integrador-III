@@ -4,12 +4,12 @@ import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
 
 class VerifyOTPScreen extends StatefulWidget {
-  final MultiFactorResolver resolver;
+  final String verificationId;
   final String phoneNumber;
 
   const VerifyOTPScreen({
     super.key,
-    required this.resolver,
+    required this.verificationId,
     required this.phoneNumber,
   });
 
@@ -20,7 +20,6 @@ class VerifyOTPScreen extends StatefulWidget {
 class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
   final _codeController = TextEditingController();
   bool _isLoading = false;
-  String? _verificationId;
   int _secondsRemaining = 120;
   late Future _initFuture;
 
@@ -30,27 +29,8 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
   void initState() {
     super.initState();
     _authService = AuthService();
-    _initFuture = _iniciarEnvioDocodigo();
+    _initFuture = Future.value();
     _iniciarTemporizador();
-  }
-
-  Future<void> _iniciarEnvioDocodigo() async {
-    try {
-      await _authService.sendMFACode(
-        resolver: widget.resolver,
-        factorIndex: 0,
-        onCodeSent: (verificationId) {
-          setState(() {
-            _verificationId = verificationId;
-          });
-          _mostrarSucesso('Código enviado para ${widget.phoneNumber}');
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        _mostrarErro('Erro ao enviar código: ${e.toString()}');
-      }
-    }
   }
 
   void _iniciarTemporizador() {
@@ -82,15 +62,9 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
     setState(() => _isLoading = true);
 
     try {
-      if (_verificationId == null) {
-        _mostrarErro('ID de verificação não disponível');
-        return;
-      }
-
-      final userCredential = await _authService.verifyAndSignInWithMFA(
-        verificationId: _verificationId!,
+      final _ = await _authService.verifyMFACode(
+        verificationId: widget.verificationId,
         smsCode: codigo,
-        resolver: widget.resolver,
       );
 
       if (mounted) {
@@ -134,12 +108,7 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
       _codeController.clear();
     });
 
-    try {
-      await _iniciarEnvioDocodigo();
-      _iniciarTemporizador();
-    } catch (e) {
-      _mostrarErro('Erro ao reenviar código: ${e.toString()}');
-    }
+    _iniciarTemporizador();
   }
 
   void _mostrarErro(String mensagem) {

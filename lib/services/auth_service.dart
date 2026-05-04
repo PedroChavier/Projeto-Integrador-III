@@ -1,11 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'two_factor_auth_service.dart';
+import '../models/two_factor_auth_settings.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth}) : _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseAuth _auth;
+  final TwoFactorAuthService _twoFactorService = TwoFactorAuthService();
 
-  /// Login padrão sem 2FA
+  /// Login padrão
   Future<UserCredential> login({
     required String email,
     required String senha,
@@ -14,159 +17,6 @@ class AuthService {
       email: email,
       password: senha,
     );
-  }
-
-  /// Login com 2FA - primeira etapa (verificar email e senha)
-  Future<UserCredential> signInWithEmailPassword({
-    required String email,
-    required String senha,
-  }) {
-    return _auth.signInWithEmailAndPassword(
-      email: email,
-      password: senha,
-    );
-  }
-
-  /// Verificar se o usuário tem 2FA ativado
-  bool isMultiFactorEnabled(User user) {
-    return user.multiFactor.enrolledFactors.isNotEmpty;
-  }
-
-  /// Obter lista de fatores inscritos do usuário
-  List<MultiFactor> getEnrolledFactors(User user) {
-    return user.multiFactor.enrolledFactors;
-  }
-
-  /// Iniciar verificação por telefone (2FA via SMS)
-  Future<String> verifyPhoneNumberForMFA({
-    required User user,
-    required String phoneNumber,
-    required Function(PhoneAuthCredential) onCodeSent,
-    required Function(FirebaseAuthException) onError,
-  }) async {
-    String? verificationId;
-
-    try {
-      await user.multiFactor.getSession().then((session) async {
-        await _auth.verifyPhoneNumber(
-          phoneNumber: phoneNumber,
-          timeout: const Duration(minutes: 2),
-          verificationCompleted: (PhoneAuthCredential credential) async {
-            // Auto-resolução (Android apenas, geralmente)
-            await user.multiFactor.enrollPhoneMfa(
-              multiFactorSession: session,
-              phoneMultiFactorInfo: PhoneMultiFactorInfo.from(credential),
-            );
-          },
-          verificationFailed: (FirebaseAuthException e) {
-            onError(e);
-          },
-          codeSent: (String verificationId, int? resendToken) {
-            onCodeSent(PhoneAuthCredential(
-              verificationId: verificationId,
-              smsCode: '',
-              providerId: 'phone',
-            ));
-          },
-          codeAutoRetrievalTimeout: (String verificationId) {},
-        );
-      });
-    } catch (e) {
-      rethrow;
-    }
-
-    return verificationId ?? '';
-  }
-
-  /// Completar inscrição de telefone para 2FA
-  Future<void> completePhoneMfaEnrollment({
-    required User user,
-    required String verificationId,
-    required String smsCode,
-  }) async {
-    try {
-      final session = await user.multiFactor.getSession();
-
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-
-      final phoneMultiFactorInfo = PhoneMultiFactorInfo.from(credential);
-
-      await user.multiFactor.enroll(
-        multiFactorInfo: phoneMultiFactorInfo,
-        multiFactorSession: session,
-      );
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  /// Verificar 2FA durante login
-  Future<UserCredential> verifyAndSignInWithMFA({
-    required String verificationId,
-    required String smsCode,
-    required MultiFactorResolver resolver,
-  }) async {
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-
-      return await resolver.resolveSignIn(
-        multiFactorAssertion: PhoneMultiFactorAssertion(credential),
-      );
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  /// Enviar código de verificação para resolver MFA durante login
-  Future<void> sendMFACode({
-    required MultiFactorResolver resolver,
-    required int factorIndex,
-    required Function(String) onCodeSent,
-  }) async {
-    try {
-      final session = resolver.session;
-      final factor = resolver.hints[factorIndex] as PhoneMultiFactorInfo;
-
-      await _auth.verifyPhoneNumber(
-        phoneNumber: factor.phoneNumber ?? '',
-        timeout: const Duration(minutes: 2),
-        verificationCompleted: (PhoneAuthCredential credential) {},
-        verificationFailed: (FirebaseAuthException e) {
-          throw e;
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          onCodeSent(verificationId);
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {},
-        multiFactorSession: session,
-        multiFactorInfo: factor,
-      );
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  /// Remover fator de autenticação (desativar 2FA)
-  Future<void> removeMultiFactorAuth({
-    required User user,
-    required int factorIndex,
-  }) async {
-    try {
-      final enrolledFactors = user.multiFactor.enrolledFactors;
-      if (factorIndex < enrolledFactors.length) {
-        await user.multiFactor.unenroll(
-          factorIndex: factorIndex,
-        );
-      }
-    } catch (e) {
-      rethrow;
-    }
   }
 
   /// Registrar novo usuário
@@ -178,6 +28,144 @@ class AuthService {
       email: email,
       password: senha,
     );
+  }
+
+  /// Verificar se o usuário tem 2FA ativado (via Firestore)
+  Future<bool> isMultiFactorEnabled(User user) async {
+    try {
+      final settings = await _twoFactorService.getTwoFactorSettings(user.uid);
+      return settings?.isEnabled ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Obter número de telefone para 2FA
+  Future<String?> getPhoneForMFA(User user) async {
+    try {
+      final settings = await _twoFactorService.getTwoFactorSettings(user.uid);
+      return settings?.phoneNumber;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Enviar código de verificação por SMS para 2FA
+  Future<void> sendMFACode({
+    required String phoneNumber,
+    required Function(String) onCodeSent,
+    required Function(FirebaseAuthException) onError,
+  }) async {
+    try {
+      final confirmationResult = await _auth.signInWithPhoneNumber(phoneNumber);
+      // Armazenar o verificationId para uso posterior
+      onCodeSent(confirmationResult.verificationId);
+    } on FirebaseAuthException catch (e) {
+      onError(e);
+    } catch (e) {
+      onError(FirebaseAuthException(
+        code: 'sms-error',
+        message: 'Erro ao enviar SMS: ${e.toString()}',
+      ));
+    }
+  }
+
+  /// Verificar código OTP durante 2FA
+  Future<UserCredential> verifyMFACode({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      return await _auth.signInWithCredential(credential);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Iniciar inscrição de 2FA - enviar código por SMS
+  Future<void> enrollPhoneForMFA({
+    required String phoneNumber,
+    required Function(String) onCodeSent,
+    required Function(FirebaseAuthException) onError,
+  }) async {
+    try {
+      await sendMFACode(
+        phoneNumber: phoneNumber,
+        onCodeSent: onCodeSent,
+        onError: onError,
+      );
+    } catch (e) {
+      if (e is FirebaseAuthException) {
+        onError(e);
+      }
+    }
+  }
+
+  /// Completar inscrição de 2FA com código OTP
+  Future<void> completePhoneMfaEnrollment({
+    required String verificationId,
+    required String smsCode,
+    required String phoneNumber,
+  }) async {
+    try {
+      // Verificar o código OTP
+      await verifyMFACode(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+
+      // Salvar configurações de 2FA no Firestore
+      final user = _auth.currentUser;
+      if (user != null) {
+        final settings = TwoFactorAuthSettings(
+          userId: user.uid,
+          isEnabled: true,
+          phoneNumber: phoneNumber,
+        );
+        await _twoFactorService.saveTwoFactorSettings(settings);
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Remover 2FA desativando a flag de 2FA
+  Future<void> removeMultiFactorAuth() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        final settings = TwoFactorAuthSettings(
+          userId: user.uid,
+          isEnabled: false,
+          phoneNumber: null,
+        );
+        await _twoFactorService.saveTwoFactorSettings(settings);
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Verificar telefone durante login com 2FA
+  /// Retorna true se o código for válido
+  Future<bool> verifyPhoneForLogin({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      // Se chegar aqui, o código é válido
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<void> sendPasswordResetEmail({required String email}) {

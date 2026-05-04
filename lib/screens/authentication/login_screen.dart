@@ -61,6 +61,24 @@ class _LoginScreenState extends State<LoginScreen> {
         senha: senha,
       );
 
+      // Verificar se o usuário tem 2FA ativado
+      final user = userCredential.user;
+      if (user != null) {
+        final has2FA = await _authService.isMultiFactorEnabled(user);
+        
+        if (has2FA) {
+          // Usuário tem 2FA ativado, redirecionar para verificação OTP
+          if (mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => VerifyOTPScreen(user: user),
+              ),
+            );
+            return;
+          }
+        }
+      }
+
       if (mounted) {
         _mostrarSucesso('Bem-vindo, ${userCredential.user?.email}!');
 
@@ -74,28 +92,6 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on FirebaseAuthException catch (e) {
-      // Verificar se é necessário 2FA
-      if (e.code == 'multi-factor-auth-required') {
-        // Obter o MultiFactorResolver
-        final resolver = e.resolver;
-        if (resolver != null && mounted) {
-          // Navegar para tela de verificação OTP
-          final phoneNumber = (resolver.hints.first as PhoneMultiFactorInfo)
-                  .phoneNumber ??
-              'seu telefone';
-
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => VerifyOTPScreen(
-                resolver: resolver,
-                phoneNumber: phoneNumber,
-              ),
-            ),
-          );
-          return;
-        }
-      }
-
       String mensagem = 'Erro ao fazer login';
 
       switch (e.code) {
@@ -113,6 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
         case 'too-many-requests':
           mensagem = 'Muitas tentativas. Tente novamente mais tarde';
+          break;
+        case 'multi-factor-auth-required':
+          mensagem = 'Verificação de dois fatores necessária';
           break;
         default:
           mensagem = e.message ?? 'Erro desconhecido';

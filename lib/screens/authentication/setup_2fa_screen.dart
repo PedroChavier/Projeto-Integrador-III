@@ -52,20 +52,11 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
     setState(() => _isLoading = true);
 
     try {
-      if (_currentUser == null) {
-        _mostrarErro('Usuário não autenticado');
-        return;
-      }
-
-      String verificationIdTemp = '';
-
-      await _authService.verifyPhoneNumberForMFA(
-        user: _currentUser!,
+      await _authService.sendMFACode(
         phoneNumber: phone,
-        onCodeSent: (PhoneAuthCredential credential) {
-          verificationIdTemp = credential.verificationId;
+        onCodeSent: (String verificationId) {
           setState(() {
-            _verificationId = verificationIdTemp;
+            _verificationId = verificationId;
             _show2FAStatus = false;
           });
           _mostrarSucesso('Código enviado para $phone');
@@ -105,9 +96,9 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
       }
 
       await _authService.completePhoneMfaEnrollment(
-        user: _currentUser!,
         verificationId: _verificationId!,
         smsCode: otp,
+        phoneNumber: _phoneController.text.trim(),
       );
 
       if (mounted) {
@@ -133,13 +124,6 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
 
   Future<void> _desativarDoisFatores() async {
     if (_currentUser == null) return;
-
-    final fatoresInscritos = _authService.getEnrolledFactors(_currentUser!);
-
-    if (fatoresInscritos.isEmpty) {
-      _mostrarErro('Nenhum fator de autenticação ativado');
-      return;
-    }
 
     // Mostrar diálogo de confirmação
     final confirmar = await showDialog<bool>(
@@ -169,13 +153,7 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
       setState(() => _isSaving = true);
 
       try {
-        // Desativar todos os fatores
-        for (int i = 0; i < fatoresInscritos.length; i++) {
-          await _authService.removeMultiFactorAuth(
-            user: _currentUser!,
-            factorIndex: i,
-          );
-        }
+        await _authService.removeMultiFactorAuth();
 
         if (mounted) {
           _mostrarSucesso('Dois fatores desativado com sucesso');
