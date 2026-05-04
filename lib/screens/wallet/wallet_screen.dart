@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../home/home_screen.dart';
 import 'deposit_screen.dart';
+import '../balcao/balcao_screen.dart';
 
 class WalletScreen extends StatelessWidget {
   const WalletScreen({super.key});
@@ -150,41 +151,79 @@ class WalletScreen extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.swap_horiz_outlined,
-                            color: Color.fromARGB(255, 112, 121, 133), size: 22),
+                        
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Comprar ou vender tokens?',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.black87,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                              
                               const SizedBox(height: 2),
                               GestureDetector(
-                                onTap: () {},
-                                child: const Text(
-                                  'Ir para Balcão',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF6C63FF),
-                                    fontWeight: FontWeight.w600,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    PageRouteBuilder(
+                                      pageBuilder: (_, __, ___) => const BalcaoScreen(), // sua tela
+                                      transitionDuration: Duration.zero,
+                                      reverseTransitionDuration: Duration.zero,
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: const Color.fromARGB(194, 240, 240, 240),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.swap_horiz_outlined,
+                                        color: Color.fromARGB(255, 112, 121, 133),
+                                        size: 22,
+                                      ),
+                                      const SizedBox(width: 10),
+
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: const [
+                                            Text(
+                                              'Comprar ou vender tokens?',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.black87,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            SizedBox(height: 2),
+                                            Text(
+                                              'Ir para Balcão',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Color(0xFF6C63FF),
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      const Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 14,
+                                        color: Colors.black45,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const Text(
-                          '>',
-                          style:
-                              TextStyle(fontSize: 16, color: Colors.black45),
-                        ),
+                        
                       ],
                     ),
                   ),
