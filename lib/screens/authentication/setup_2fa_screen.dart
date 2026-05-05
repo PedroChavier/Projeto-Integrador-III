@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
+import '../home/home_screen.dart';
 
 class Setup2FAScreen extends StatefulWidget {
-  const Setup2FAScreen({super.key});
+  final String? verificationId;
+  final String? phoneNumber;
+  final bool isFromRegistration;
+
+  const Setup2FAScreen({
+    super.key,
+    this.verificationId,
+    this.phoneNumber,
+    this.isFromRegistration = false,
+  });
 
   @override
   State<Setup2FAScreen> createState() => _Setup2FAScreenState();
@@ -17,6 +27,7 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
   String? _verificationId;
   final _otpController = TextEditingController();
   bool _isVerifyingOTP = false;
+  bool _twoFaEnabled = false;
 
   late final AuthService _authService;
   User? _currentUser;
@@ -26,7 +37,26 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
     super.initState();
     _authService = AuthService();
     _currentUser = _authService.currentUser;
-    _phoneController.text = '';
+    
+    // Se vem do registro com verification já enviada
+    if (widget.verificationId != null && widget.phoneNumber != null) {
+      _phoneController.text = widget.phoneNumber!;
+      _verificationId = widget.verificationId;
+      _show2FAStatus = false;
+    } else {
+      _phoneController.text = '';
+      _load2FAStatus();
+    }
+  }
+
+  Future<void> _load2FAStatus() async {
+    if (_currentUser == null) return;
+    final enabled = await _authService.isMultiFactorEnabled(_currentUser!);
+    if (mounted) {
+      setState(() {
+        _twoFaEnabled = enabled;
+      });
+    }
   }
 
   @override
@@ -52,19 +82,16 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.sendMFACode(
-        phoneNumber: phone,
-        onCodeSent: (String verificationId) {
-          setState(() {
-            _verificationId = verificationId;
-            _show2FAStatus = false;
-          });
-          _mostrarSucesso('Código enviado para $phone');
-        },
-        onError: (FirebaseAuthException e) {
-          _mostrarErro('Erro: ${e.message}');
-        },
-      );
+      final verificationId = await _authService.sendMFACode(phoneNumber: phone);
+      if (mounted) {
+        setState(() {
+          _verificationId = verificationId;
+          _show2FAStatus = false;
+        });
+      }
+      _mostrarSucesso('Código enviado para $phone');
+    } on FirebaseAuthException catch (e) {
+      _mostrarErro('Erro: ${e.message}');
     } catch (e) {
       _mostrarErro('Erro ao enviar código: ${e.toString()}');
     } finally {
@@ -90,30 +117,38 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
     setState(() => _isVerifyingOTP = true);
 
     try {
-      if (_currentUser == null) {
-        _mostrarErro('Usuário não autenticado');
-        return;
-      }
-
+      debugPrint('[Setup2FA] Completando inscrição de 2FA com OTP: $otp');
       await _authService.completePhoneMfaEnrollment(
         verificationId: _verificationId!,
         smsCode: otp,
         phoneNumber: _phoneController.text.trim(),
       );
+      debugPrint('[Setup2FA] Inscrição de 2FA concluída com sucesso');
 
       if (mounted) {
         _mostrarSucesso('Dois fatores ativado com sucesso!');
         await Future.delayed(const Duration(milliseconds: 1500));
         if (mounted) {
-          setState(() {
-            _show2FAStatus = true;
-            _phoneController.clear();
-            _otpController.clear();
-            _verificationId = null;
-          });
+          // Se vem do registro, navega para home
+          if (widget.isFromRegistration) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              (route) => false,
+            );
+          } else {
+            // Caso contrário, volta à tela de segurança
+            setState(() {
+              _show2FAStatus = true;
+              _phoneController.clear();
+              _otpController.clear();
+              _verificationId = null;
+            });
+            _load2FAStatus();
+          }
         }
       }
     } catch (e) {
+      debugPrint('[Setup2FA] Erro ao verificar código: ${e.toString()}');
       _mostrarErro('Erro ao verificar código: ${e.toString()}');
     } finally {
       if (mounted) {
@@ -157,8 +192,8 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
 
         if (mounted) {
           _mostrarSucesso('Dois fatores desativado com sucesso');
-          // Atualizar usuário atual
           _currentUser = _authService.currentUser;
+          _load2FAStatus();
         }
       } catch (e) {
         _mostrarErro('Erro ao desativar: ${e.toString()}');
@@ -191,8 +226,7 @@ class _Setup2FAScreenState extends State<Setup2FAScreen> {
   }
 
   bool _tem2FAAtivado() {
-    if (_currentUser == null) return false;
-    return _authService.isMultiFactorEnabled(_currentUser!);
+    return _twoFaEnabled;
   }
 
   @override

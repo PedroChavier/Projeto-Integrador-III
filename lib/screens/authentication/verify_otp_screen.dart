@@ -185,7 +185,7 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6C63FF).withOpacity(0.1),
+                        color: const Color.fromRGBO(108, 99, 255, 0.1),
                         borderRadius: BorderRadius.circular(40),
                       ),
                       child: const Icon(

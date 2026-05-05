@@ -61,21 +61,38 @@ class _LoginScreenState extends State<LoginScreen> {
         senha: senha,
       );
 
-      // Verificar se o usuário tem 2FA ativado
       final user = userCredential.user;
       if (user != null) {
-        final has2FA = await _authService.isMultiFactorEnabled(user);
-        
-        if (has2FA) {
-          // Usuário tem 2FA ativado, redirecionar para verificação OTP
-          if (mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => VerifyOTPScreen(user: user),
-              ),
-            );
-            return;
+        try {
+          final isMfaEnabled = await _authService.isMultiFactorEnabled(user);
+          if (isMfaEnabled) {
+            final phone = await _authService.getPhoneForMFA(user);
+            if (phone == null || phone.isEmpty) {
+              await _authService.signOut();
+              _mostrarErro('Conta com 2FA ativado, mas telefone não encontrado.');
+              return;
+            }
+
+            try {
+              final verificationId = await _authService.sendMFACode(phoneNumber: phone);
+              if (mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => VerifyOTPScreen(
+                      verificationId: verificationId,
+                      phoneNumber: phone,
+                    ),
+                  ),
+                );
+              }
+              return;
+            } on FirebaseAuthException catch (e) {
+              _mostrarErro('Erro ao enviar código 2FA: ${e.message}');
+              return;
+            }
           }
+        } catch (e) {
+          debugPrint('Erro ao verificar status 2FA: $e');
         }
       }
 

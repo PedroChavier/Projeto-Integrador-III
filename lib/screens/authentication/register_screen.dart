@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../models/usuario.dart';
 import '../../services/auth_service.dart';
 import '../../services/registration_service.dart';
+import 'setup_2fa_screen.dart';
 
 class CadastroScreen extends StatefulWidget {
   const CadastroScreen({super.key});
@@ -127,7 +128,52 @@ class _CadastroScreenState extends State<CadastroScreen> {
 
     try {
       await _registrationService.registerUser(usuario);
+      final newUser = _authService.currentUser;
 
+      if (!mounted) return;
+
+      // Oferecer ativar 2FA após o registro
+      if (newUser != null) {
+        final ativar2FA = await _showDialogAtivar2FA();
+        if (ativar2FA && mounted) {
+          // Navegar para setup de 2FA com telefone do registro
+          try {
+            // Enviar código para o telefone registrado
+            debugPrint('[2FA] Tentando enviar código para +55$telefone');
+            final verificationId = await _authService.sendMFACode(
+              phoneNumber: '+55$telefone',
+            );
+            debugPrint('[2FA] Código enviado com sucesso. VerificationId: $verificationId');
+
+            if (mounted) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => Setup2FAScreen(
+                    verificationId: verificationId,
+                    phoneNumber: '+55$telefone',
+                    isFromRegistration: true,
+                  ),
+                ),
+              );
+            }
+            return;
+          } on FirebaseAuthException catch (e) {
+            debugPrint('[2FA] FirebaseAuthException: code=${e.code}, message=${e.message}');
+            _mostrarMensagem(
+              'Erro Firebase: ${e.message ?? e.code}',
+              isError: true,
+            );
+          } catch (e) {
+            debugPrint('[2FA] Erro geral: ${e.toString()}');
+            _mostrarMensagem(
+              'Erro ao enviar código 2FA: ${e.toString()}',
+              isError: true,
+            );
+          }
+        }
+      }
+
+      // Fazer logout após oferecer 2FA
       try {
         await _authService.signOut();
       } catch (error) {
@@ -135,7 +181,6 @@ class _CadastroScreenState extends State<CadastroScreen> {
       }
 
       if (!mounted) return;
-
       _limparCampos();
       _mostrarMensagem('Conta criada com sucesso. Agora voce ja pode entrar.');
       Navigator.of(context).maybePop();
@@ -234,6 +279,34 @@ class _CadastroScreenState extends State<CadastroScreen> {
     }
 
     return idade >= 18;
+  }
+
+  Future<bool> _showDialogAtivar2FA() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Ativar Autenticação de Dois Fatores?'),
+            content: const Text(
+              'Proteja sua conta com autenticação de dois fatores. '
+              'Você receberá um código por SMS para verificar seu login.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Depois'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Ativar Agora',
+                  style: TextStyle(color: Color(0xFF6C63FF)),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   InputDecoration _inputDecoration({required String hint, Widget? suffixIcon}) {
