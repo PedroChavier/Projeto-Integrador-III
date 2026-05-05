@@ -10,8 +10,7 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "deploy": "firebase deploy --only functions --project mesclainvest-34c45",
-    "logs": "firebase functions:log",
-    "see": "flutter run -d chrome "
+    "logs": "firebase functions:log"
   },
   "dependencies": {
     "cors": "^2.8.6",

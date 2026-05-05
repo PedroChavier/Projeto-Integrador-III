@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../services/auth_service.dart';
+import '../home/home_screen.dart';
+import '../initial/splash_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -10,6 +13,7 @@ class PerfilScreen extends StatefulWidget {
 
 class _PerfilScreenState extends State<PerfilScreen> {
   bool _2faAtivado = false;
+  final AuthService _authService = AuthService();
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +21,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
       backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: Column(
         children: [
-          // ── Status bar area + gradiente + header ──
           Container(
             color: Colors.white,
             child: SafeArea(
@@ -25,22 +28,26 @@ class _PerfilScreenState extends State<PerfilScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Linha gradiente
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                   Container(
                     height: 2,
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Color(0xFF6C63FF), Color(0xFFE040FB), Color(0xFFFF6B6B)],
+                        colors: [
+                          Color(0xFF6C63FF),
+                          Color(0xFFE040FB),
+                          Color(0xFFFF6B6B),
+                        ],
                       ),
                     ),
                   ),
-                  // Seta voltar
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 22),
-                    onPressed: () {
-                        Navigator.pop(context);
-                      },
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.black87,
+                      size: 22,
+                    ),
+                    onPressed: () => Navigator.pop(context),
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                     constraints: const BoxConstraints(),
                   ),
@@ -59,13 +66,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
               ),
             ),
           ),
-
-          // ── Conteúdo rolável ──
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  // Avatar + nome + email
                   Container(
                     width: double.infinity,
                     color: Colors.white,
@@ -110,8 +114,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-
-                  // ── Dados Da conta ──
                   Container(
                     width: double.infinity,
                     color: Colors.white,
@@ -131,14 +133,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         ),
                         const Divider(height: 1, color: Color(0xFFEEEEEE)),
                         _LinhaInfo(label: 'Nome Completo', valor: 'Ana Souza'),
-                        const Divider(height: 1, indent: 16, color: Color(0xFFEEEEEE)),
+                        const Divider(
+                          height: 1,
+                          indent: 16,
+                          color: Color(0xFFEEEEEE),
+                        ),
                         _LinhaInfo(label: 'Telefone', valor: '199978-1289'),
                       ],
                     ),
                   ),
                   const SizedBox(height: 10),
-
-                  // ── Segurança ──
                   Container(
                     width: double.infinity,
                     color: Colors.white,
@@ -159,7 +163,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         const Divider(height: 1, color: Color(0xFFEEEEEE)),
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 4),
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -175,30 +181,37 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                 scale: 0.85,
                                 child: Switch(
                                   value: _2faAtivado,
-                                  onChanged: (v) =>
-                                      setState(() => _2faAtivado = v),
+                                  onChanged: (value) =>
+                                      setState(() => _2faAtivado = value),
                                   activeColor: Colors.white,
                                   activeTrackColor: const Color(0xFF9E9E9E),
                                   inactiveThumbColor: Colors.white,
                                   inactiveTrackColor: const Color(0xFFBDBDBD),
-                                  trackOutlineColor:
-                                      MaterialStateProperty.all(Colors.transparent),
+                                  trackOutlineColor: MaterialStateProperty.all(
+                                    Colors.transparent,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const Divider(height: 1, indent: 16, color: Color(0xFFEEEEEE)),
+                        const Divider(
+                          height: 1,
+                          indent: 16,
+                          color: Color(0xFFEEEEEE),
+                        ),
                         GestureDetector(
                           onTap: () {
                             // TODO: alterar senha
                           },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 18),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 18,
+                            ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: const [
+                              children: [
                                 Text(
                                   'Alterar Senha',
                                   style: TextStyle(
@@ -222,11 +235,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
-
-                  // ── Sair da conta ──
                   GestureDetector(
-                    onTap: () {
-                      // TODO: logout
+                    onTap: () async {
+                      await _authService.signOut();
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => const SplashScreen(),
+                        ),
+                        (route) => false,
+                      );
                     },
                     child: const Text(
                       'Sair da conta',
@@ -242,18 +260,17 @@ class _PerfilScreenState extends State<PerfilScreen> {
               ),
             ),
           ),
-
-          // ── Bottom Nav ──
         ],
       ),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
     );
   }
 }
 
-// ── Linha label + valor ───────────────────────────────────────
 class _LinhaInfo extends StatelessWidget {
   final String label;
   final String valor;
+
   const _LinhaInfo({required this.label, required this.valor});
 
   @override
@@ -263,17 +280,20 @@ class _LinhaInfo extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87)),
-          Text(valor,
-              style:
-                  const TextStyle(fontSize: 14, color: Colors.black45)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          Text(
+            valor,
+            style: const TextStyle(fontSize: 14, color: Colors.black45),
+          ),
         ],
       ),
     );
   }
 }
-

@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
 import 'password_recovery_screen.dart';
@@ -12,10 +13,15 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const int _maxTentativasSenha = 5;
+  static const Duration _duracaoBloqueio = Duration(minutes: 5);
+
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _obscureSenha = true;
   bool _isLoading = false;
+  int _tentativasSenhaInvalidas = 0;
+  DateTime? _bloqueadoAte;
 
   late final AuthService _authService;
 
@@ -40,7 +46,51 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  bool get _loginBloqueado {
+    final bloqueadoAte = _bloqueadoAte;
+    if (bloqueadoAte == null) return false;
+
+    if (DateTime.now().isAfter(bloqueadoAte)) {
+      _bloqueadoAte = null;
+      _tentativasSenhaInvalidas = 0;
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _isErroSenha(String errorCode) {
+    return errorCode == 'wrong-password' ||
+        errorCode == 'invalid-credential' ||
+        errorCode == 'invalid-login-credentials';
+  }
+
+  void _registrarTentativaSenhaInvalida() {
+    _tentativasSenhaInvalidas++;
+
+    if (_tentativasSenhaInvalidas >= _maxTentativasSenha) {
+      _bloqueadoAte = DateTime.now().add(_duracaoBloqueio);
+    }
+  }
+
+  void _resetarControleTentativas() {
+    _tentativasSenhaInvalidas = 0;
+    _bloqueadoAte = null;
+  }
+
+  void _limparCamposLogin() {
+    _emailController.clear();
+    _senhaController.clear();
+  }
+
   void _entrar() async {
+    if (_loginBloqueado) {
+      _mostrarErro(
+        'Acesso temporariamente bloqueado por seguranca. Tente novamente mais tarde.',
+      );
+      return;
+    }
+
     final email = _emailController.text.trim();
     final senha = _senhaController.text;
 
@@ -50,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!_isValidEmail(email)) {
-      _mostrarErro('E-mail inválido');
+      _mostrarErro('E-mail invalido');
       return;
     }
 
@@ -68,7 +118,15 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted) {
+<<<<<<< HEAD
         final nomeUsuario = userCredential.user?.displayName;
+=======
+        setState(_resetarControleTentativas);
+        final uid = userCredential.user?.uid;
+        final nomeUsuario = uid == null
+            ? null
+            : await _authService.getUserDisplayName(uid);
+>>>>>>> 3b98eff3f84c9933e747882bf8fc297bf9ecdc21
 
         _mostrarSucesso(
           nomeUsuario == null || nomeUsuario.isEmpty
@@ -86,19 +144,33 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on FirebaseAuthException catch (e) {
       String mensagem = 'Erro ao fazer login';
+      final erroSenha = _isErroSenha(e.code);
+
+      if (erroSenha) {
+        setState(_registrarTentativaSenhaInvalida);
+      }
 
       switch (e.code) {
         case 'user-not-found':
-          mensagem = 'Usuário não encontrado';
+          mensagem = 'email ou senha invalidos';
+          _limparCamposLogin();
           break;
         case 'wrong-password':
-          mensagem = 'Senha incorreta';
+        case 'invalid-credential':
+        case 'invalid-login-credentials':
+          if (_loginBloqueado) {
+            mensagem =
+                'Acesso temporariamente bloqueado por seguranca. Tente novamente mais tarde.';
+          } else {
+            mensagem = 'email ou senha invalidos';
+            _limparCamposLogin();
+          }
           break;
         case 'invalid-email':
-          mensagem = 'E-mail inválido';
+          mensagem = 'E-mail invalido';
           break;
         case 'user-disabled':
-          mensagem = 'Usuário desativado';
+          mensagem = 'Usuario desativado';
           break;
         case 'too-many-requests':
           mensagem = 'Muitas tentativas. Tente novamente mais tarde';
@@ -200,7 +272,6 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título
               const Text(
                 'Login',
                 style: TextStyle(
@@ -211,12 +282,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Insira seus dados para começar',
+                'Insira seus dados para comecar',
                 style: TextStyle(fontSize: 14, color: Colors.black45),
               ),
               const SizedBox(height: 48),
-
-              // Campo E-mail
               const Text(
                 'E-mail',
                 style: TextStyle(
@@ -234,8 +303,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: _inputDecoration(hint: 'seu_email@dominio.com'),
               ),
               const SizedBox(height: 20),
-
-              // Campo Senha
               const Text(
                 'Senha',
                 style: TextStyle(
@@ -267,14 +334,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // Esqueceu a senha
               Align(
                 alignment: Alignment.centerRight,
                 child: GestureDetector(
                   onTap: _isLoading
                       ? null
                       : () {
+<<<<<<< HEAD
+=======
+                          final email =
+                              _emailController.text.trim().toLowerCase();
+
+                          if (!_isValidEmail(email)) {
+                            _mostrarErro(
+                              'Informe um e-mail valido para recuperar a senha',
+                            );
+                            return;
+                          }
+
+>>>>>>> 3b98eff3f84c9933e747882bf8fc297bf9ecdc21
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -301,13 +379,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-
-              // Botão Entrar
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: OutlinedButton(
-                  onPressed: _isLoading ? null : _entrar,
+                  onPressed: _isLoading || _loginBloqueado ? null : _entrar,
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
                       color: _isLoading ? Colors.grey : Colors.black87,
@@ -328,9 +404,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         )
-                      : const Text(
-                          'Entrar',
-                          style: TextStyle(
+                      : Text(
+                          _loginBloqueado
+                              ? 'Bloqueado temporariamente'
+                              : 'Entrar',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
