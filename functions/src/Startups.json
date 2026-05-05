@@ -1,0 +1,102 @@
+[
+  {
+    "nome": "AgroSense",
+    "setor": "Agronegócio",
+    "status": "Em operação",
+    "ativo": true,
+    "bio": "Plataforma de monitoramento de lavouras via sensores IoT e IA para pequenos produtores rurais.",
+    "tokens_emitidos": 500000,
+    "preco_token": 0.85,
+    "nmr_investidores": 134
+  },
+  {
+    "nome": "MedConnect",
+    "setor": "Saúde",
+    "status": "Em expansão",
+    "ativo": true,
+    "bio": "Aplicativo que conecta pacientes a médicos especialistas para consultas rápidas por telemedicina.",
+    "tokens_emitidos": 1200000,
+    "preco_token": 2.40,
+    "nmr_investidores": 412
+  },
+  {
+    "nome": "EduPath",
+    "setor": "Educação",
+    "status": "Nova",
+    "ativo": true,
+    "bio": "Sistema adaptativo de trilhas de aprendizado para estudantes do ensino médio com foco em ENEM.",
+    "tokens_emitidos": 200000,
+    "preco_token": 0.30,
+    "nmr_investidores": 47
+  },
+  {
+    "nome": "LogiTrack",
+    "setor": "Logística",
+    "status": "Em operação",
+    "ativo": true,
+    "bio": "Solução de rastreamento inteligente de entregas last-mile para e-commerces de pequeno porte.",
+    "tokens_emitidos": 750000,
+    "preco_token": 1.10,
+    "nmr_investidores": 223
+  },
+  {
+    "nome": "GreenCredit",
+    "setor": "Finanças",
+    "status": "Nova",
+    "ativo": true,
+    "bio": "Plataforma de crédito sustentável que recompensa empresas por práticas ESG verificadas.",
+    "tokens_emitidos": 300000,
+    "preco_token": 0.55,
+    "nmr_investidores": 89
+  },
+  {
+    "nome": "BuildEasy",
+    "setor": "Construção Civil",
+    "status": "Em operação",
+    "ativo": true,
+    "bio": "Marketplace que conecta pedreiros e eletricistas autônomos a clientes residenciais com orçamento instantâneo.",
+    "tokens_emitidos": 600000,
+    "preco_token": 0.95,
+    "nmr_investidores": 178
+  },
+  {
+    "nome": "PetCare360",
+    "setor": "Bem-estar animal",
+    "status": "Em expansão",
+    "ativo": true,
+    "bio": "Super-app para tutores de pets integrando agenda veterinária, petshop e seguro animal.",
+    "tokens_emitidos": 900000,
+    "preco_token": 1.75,
+    "nmr_investidores": 305
+  },
+  {
+    "nome": "LegalBot",
+    "setor": "Jurídico",
+    "status": "Nova",
+    "ativo": false,
+    "bio": "Assistente jurídico por IA para geração automatizada de contratos e petições simples.",
+    "tokens_emitidos": 150000,
+    "preco_token": 0.20,
+    "nmr_investidores": 12
+  },
+  {
+    "nome": "FoodLoop",
+    "setor": "Alimentação",
+    "status": "Em operação",
+    "ativo": true,
+    "bio": "Plataforma de reaproveitamento de excedente alimentar de restaurantes conectando doações a ONGs.",
+    "tokens_emitidos": 400000,
+    "preco_token": 0.70,
+    "nmr_investidores": 156
+  },
+  {
+    "nome": "CloudSchool",
+    "setor": "Educação",
+    "status": "Em expansão",
+    "ativo": true,
+    "bio": "Infraestrutura SaaS para escolas públicas municipais gerenciarem turmas, notas e comunicação com pais.",
+    "tokens_emitidos": 1000000,
+    "preco_token": 1.90,
+    "nmr_investidores": 367
+  }
+]

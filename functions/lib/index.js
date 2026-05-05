@@ -33,18 +33,22 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.redefinirSenhaComCodigo = exports.solicitarCodigoRecuperacaoSenha = exports.excluirPerfilAoExcluirAuth = exports.registrarUsuario = void 0;
+exports.listarStartups = exports.redefinirSenhaComCodigo = exports.solicitarCodigoRecuperacaoSenha = exports.excluirPerfilAoExcluirAuth = exports.registrarUsuario = exports.popularStartupsFirestore = void 0;
 const node_crypto_1 = require("node:crypto");
 const net = __importStar(require("node:net"));
 const tls = __importStar(require("node:tls"));
 const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions/v1"));
+var passardados_1 = require("./passardados");
+Object.defineProperty(exports, "popularStartupsFirestore", { enumerable: true, get: function () { return passardados_1.popularStartupsFirestore; } });
+// Inicializa o SDK do Firebase Admin (requisito para acesso ao Auth/Firestore).
 admin.initializeApp();
 const db = admin.firestore();
 const usuariosCollection = db.collection("usuarios");
 const passwordRecoveryCollection = db.collection("passwordRecoveryCodes");
 const recoveryCodeTtlMinutes = 10;
 const recoveryCodeLength = 6;
+// Função Callable: registra um usuário (valida autenticação, sanitiza payload, evita CPF duplicado e salva/merge no Firestore).
 exports.registrarUsuario = functions.https.onCall(async (data, context) => {
     if (!context.auth?.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Usuario nao autenticado.");
@@ -63,11 +67,13 @@ exports.registrarUsuario = functions.https.onCall(async (data, context) => {
         uid: userId,
     };
 });
+// Trigger Auth: ao remover usuário no Firebase Auth, tenta remover o perfil correspondente no Firestore.
 exports.excluirPerfilAoExcluirAuth = functions.auth
     .user()
     .onDelete(async (user) => {
     await usuariosCollection.doc(user.uid).delete().catch(() => undefined);
 });
+// Função Callable: solicita código de recuperação de senha, armazenando hash do código no Firestore e enviando e-mail.
 exports.solicitarCodigoRecuperacaoSenha = functions.https.onCall(async (data) => {
     const email = sanitizeEmail(data.email);
     const response = {
@@ -103,6 +109,7 @@ exports.solicitarCodigoRecuperacaoSenha = functions.https.onCall(async (data) =>
     });
     return response;
 });
+// Função Callable: valida código de recuperação e redefine a senha do usuário no Firebase Auth, marcando o uso do código.
 exports.redefinirSenhaComCodigo = functions.https.onCall(async (data) => {
     const email = sanitizeEmail(data.email);
     const code = sanitizeRecoveryCode(data.code);
@@ -149,6 +156,160 @@ exports.redefinirSenhaComCodigo = functions.https.onCall(async (data) => {
         message: "Senha redefinida com sucesso.",
     };
 });
+// Normaliza a etapa/estágio (strings/nums diversos) para um conjunto reduzido de valores canônicos.
+function normalizeStage(raw) {
+    if (raw === null || raw === undefined)
+        return "nova";
+    if (typeof raw === "string") {
+        const normalized = raw
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, ""); // remove acentos
+        if (normalized === "nova")
+            return "nova";
+        if (normalized === "emoperacao" || normalized === "em-operacao")
+            return "emOperacao";
+        if (normalized === "emexpansao" || normalized === "em-expansao")
+            return "emExpansao";
+        // fallback por substring
+        if (normalized.includes("nova"))
+            return "nova";
+        if (normalized.includes("operacao"))
+            return "emOperacao";
+        if (normalized.includes("expansao"))
+            return "emExpansao";
+    }
+    if (typeof raw === "number") {
+        if (raw === 0)
+            return "nova";
+        if (raw === 1)
+            return "emOperacao";
+        if (raw === 2)
+            return "emExpansao";
+    }
+    return "nova";
+}
+// Converte o estágio normalizado em um rótulo amigável para UI.
+function stageLabel(raw) {
+    const stage = normalizeStage(raw);
+    switch (stage) {
+        case "emOperacao":
+            return "Em operação";
+        case "emExpansao":
+            return "Em expansão";
+        case "nova":
+        default:
+            return "Nova";
+    }
+}
+// Converte valores potencialmente string/number para um number finito; caso não seja válido, retorna null.
+function toNumber(raw) {
+    if (typeof raw === "number" && Number.isFinite(raw))
+        return raw;
+    if (typeof raw === "string") {
+        const cleaned = raw
+            .replace(/\s/g, "")
+            .replace(/\./g, "")
+            .replace(",", ".");
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+}
+// Formata números grandes de forma compacta (k/M) para reduzir tamanho no catálogo.
+function formatCompactNumberBR(value) {
+    const abs = Math.abs(value);
+    if (abs >= 1000000)
+        return `${Math.round(value / 1000000)}M`;
+    if (abs >= 1000)
+        return `${Math.round(value / 1000)}k`;
+    return `${Math.round(value)}`;
+}
+// Adiciona prefixo monetário (R$) ao número compactado.
+function formatCapital(value) {
+    return `R$ ${formatCompactNumberBR(value)}`;
+}
+// Formata tokens (usando o mesmo estilo compactado), delegando para função compartilhada.
+function formatTokens(value) {
+    // a UI hoje usa ex.: "50k"
+    // se vier null/0, devolve "0"
+    return absRoundToCompact(value);
+}
+// Formata números de forma compacta com sufixo (k/M/B), usando arredondamento.
+function absRoundToCompact(value) {
+    const abs = Math.abs(value);
+    if (abs >= 1000000000)
+        return `${Math.round(value / 1000000000)}B`;
+    if (abs >= 1000000)
+        return `${Math.round(value / 1000000)}M`;
+    if (abs >= 1000)
+        return `${Math.round(value / 1000)}k`;
+    return `${Math.round(value)}`;
+}
+// Formata preço em Real Brasileiro, com 2 casas e vírgula decimal (ex.: "R$ 25,00").
+function formatPrecoBRL(value) {
+    // UI hoje usa "R$ 25,00"
+    const fixed = value.toFixed(2);
+    const withComma = fixed.replace(".", ",");
+    return `R$ ${withComma}`;
+}
+// Seleciona o preço a partir de múltiplos campos possíveis no documento; se não houver, usa fallback (cptAportado / totalTokens).
+function pickPrecoFromData(data, cptAportado, totalTokens) {
+    // tenta campos comuns se existirem
+    const possibleFields = [
+        "preco",
+        "precoToken",
+        "preco_token",
+        "precoTokenAtual",
+        "preco_atual",
+    ];
+    for (const key of possibleFields) {
+        const maybe = toNumber(data[key]);
+        if (maybe !== null)
+            return maybe;
+    }
+    // fallback: preco = cptAportado / totalTokens
+    if (totalTokens > 0)
+        return cptAportado / totalTokens;
+    return 0;
+}
+// Função Callable: lista startups do Firestore e retorna itens formatados (capital/tokens/preço) para o catálogo.
+exports.listarStartups = functions.https.onCall(async (_data, _context) => {
+    // tenta múltiplos nomes de coleção (pra não quebrar se o schema estiver diferente)
+    const collectionsToTry = ["startups", "Startups", "startup"];
+    let snapshot = null;
+    for (const collectionName of collectionsToTry) {
+        const snap = await db.collection(collectionName).get();
+        if (!snap.empty) {
+            snapshot = snap;
+            break;
+        }
+    }
+    const docs = snapshot?.docs ?? [];
+    const startups = docs.map((doc) => {
+        const data = doc.data();
+        const nome = typeof data.nome === "string" ? data.nome : "";
+        const descricao = typeof data.descricao === "string" ? data.descricao : "";
+        const estagio = data.estagioDesenvolvimento ?? data.estagio ?? data.stage;
+        const status = stageLabel(estagio);
+        const totalTokensRaw = data.totalTokensEmitidos ?? data.totalTokens ?? data.tokensEmitidos;
+        const cptAportadoRaw = data.cptAportado ?? data.capitalAportado ?? data.cpt;
+        const totalTokens = toNumber(totalTokensRaw) ?? 0;
+        const cptAportado = toNumber(cptAportadoRaw) ?? 0;
+        const preco = pickPrecoFromData(data, cptAportado, totalTokens);
+        return {
+            nome,
+            descricao,
+            status,
+            tokens: formatTokens(totalTokens),
+            capital: formatCapital(cptAportado),
+            preco: formatPrecoBRL(preco),
+        };
+    });
+    return { startups };
+});
+// Valida se um CPF já está disponível para cadastro; se existir outro usuário com o mesmo CPF, lança erro.
 async function validarCpfDisponivel(cpf, userId) {
     const snapshot = await usuariosCollection
         .where("cpf", "==", cpf)
@@ -158,6 +319,7 @@ async function validarCpfDisponivel(cpf, userId) {
         throw new functions.https.HttpsError("already-exists", "Ja existe um usuario cadastrado com este CPF.");
     }
 }
+// Sanitiza e normaliza o payload de registro (CPF/telefone/e-mail/senha/data) para um objeto consistente.
 function normalizarPayload(data, emailAutenticado) {
     const cpf = sanitizeDigits(data.cpf, "CPF");
     const fullName = sanitizeRequiredString(data.fullName, "Nome completo");
@@ -190,12 +352,14 @@ function normalizarPayload(data, emailAutenticado) {
         userloggedIn,
     };
 }
+// Hasheia a senha recebida com SHA-256 (com validação mínima de tamanho) antes de salvar no Firestore.
 function hashPassword(password) {
     if (password.length < 6) {
         throw new functions.https.HttpsError("invalid-argument", "A senha deve ter pelo menos 6 caracteres.");
     }
     return (0, node_crypto_1.createHash)("sha256").update(password).digest("hex");
 }
+// Sanitiza e valida o código de recuperação (somente dígitos, com tamanho exato).
 function sanitizeRecoveryCode(value) {
     const raw = sanitizeRequiredString(value, "Codigo");
     const digits = raw.replace(/\D/g, "");
@@ -204,6 +368,7 @@ function sanitizeRecoveryCode(value) {
     }
     return digits;
 }
+// Sanitiza a nova senha e valida tamanho mínimo para redefinição.
 function sanitizeNewPassword(value) {
     const password = sanitizeRequiredString(value, "Nova senha");
     if (password.length < 6) {
@@ -211,6 +376,7 @@ function sanitizeNewPassword(value) {
     }
     return password;
 }
+// Garante que um campo seja string não vazia (trim), senão lança HttpsError.
 function sanitizeRequiredString(value, fieldName) {
     if (typeof value != "string") {
         throw new functions.https.HttpsError("invalid-argument", `${fieldName} obrigatorio.`);
@@ -221,10 +387,12 @@ function sanitizeRequiredString(value, fieldName) {
     }
     return normalized;
 }
+// Sanitiza campos numéricos representados como texto (mantém apenas dígitos), usando sanitizeRequiredString.
 function sanitizeDigits(value, fieldName) {
     const raw = sanitizeRequiredString(value, fieldName);
     return raw.replace(/\D/g, "");
 }
+// Sanitiza e valida e-mail por regex, convertendo para lowercase.
 function sanitizeEmail(value) {
     const email = sanitizeRequiredString(value, "E-mail").toLowerCase();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -233,6 +401,7 @@ function sanitizeEmail(value) {
     }
     return email;
 }
+// Converte string de data em Timestamp do Firestore; rejeita datas inválidas e datas no futuro.
 function sanitizeBirthDate(value) {
     const raw = sanitizeRequiredString(value, "Data de nascimento");
     const parsedDate = new Date(raw);
@@ -241,21 +410,26 @@ function sanitizeBirthDate(value) {
     }
     return admin.firestore.Timestamp.fromDate(parsedDate);
 }
+// Cria um ID determinístico para o documento de recuperação de senha, derivado do e-mail (hash).
 function buildRecoveryDocId(email) {
     return (0, node_crypto_1.createHash)("sha256").update(email).digest("hex");
 }
+// Gera hash do código de recuperação combinando e-mail e código, para comparar sem armazenar o código em claro.
 function hashRecoveryCode(email, code) {
     return (0, node_crypto_1.createHash)("sha256").update(`${email}:${code}`).digest("hex");
 }
+// Gera um código numérico aleatório com o comprimento especificado.
 function generateNumericCode(length) {
     return Array.from({ length }, () => (0, node_crypto_1.randomInt)(0, 10)).join("");
 }
+// Detecta especificamente o erro do Firebase Auth quando o usuário não é encontrado por e-mail.
 function isAuthUserNotFound(error) {
     return (typeof error === "object" &&
         error !== null &&
         "code" in error &&
         error.code === "auth/user-not-found");
 }
+// Converte um erro arbitrário em HttpsError, reaproveitando HttpsError existentes e usando fallback se necessário.
 function toHttpsError(error, fallbackMessage) {
     if (error instanceof functions.https.HttpsError) {
         return error;
@@ -265,6 +439,7 @@ function toHttpsError(error, fallbackMessage) {
         : fallbackMessage;
     return new functions.https.HttpsError("internal", message);
 }
+// Envia o e-mail de recuperação de senha via conexão TCP/TLS, executando o fluxo SMTP manualmente.
 async function sendRecoveryCodeEmail({ to, code, expiresInMinutes, }) {
     const smtp = getSmtpConfig();
     const socket = await connectSmtp(smtp);
@@ -303,6 +478,7 @@ async function sendRecoveryCodeEmail({ to, code, expiresInMinutes, }) {
         socket.end();
     }
 }
+// Lê configuração SMTP das Cloud Functions (configurações expostas via functions.config()).
 function getSmtpConfig() {
     const smtp = functions.config().smtp;
     if (!smtp?.host || !smtp?.user || !smtp?.pass || !smtp?.from_email) {
@@ -318,6 +494,7 @@ function getSmtpConfig() {
         fromName: String(smtp.from_name ?? "Mescla Invest"),
     };
 }
+// Conecta ao servidor SMTP via TLS (secure) ou TCP simples (insecure), retornando um socket pronto para comandos.
 async function connectSmtp(smtp) {
     return await new Promise((resolve, reject) => {
         const onError = (error) => reject(error);
@@ -337,16 +514,19 @@ async function connectSmtp(smtp) {
         socket.on("error", onError);
     });
 }
+// Envia um comando SMTP e espera por um código de resposta específico (ex.: EHLO -> 250).
 async function sendCommand(socket, command, expectedCode) {
     socket.write(`${command}\r\n`);
     await expectResponse(socket, expectedCode);
 }
+// Lê resposta SMTP do socket e valida se o código retornado corresponde ao esperado.
 async function expectResponse(socket, expectedCode) {
     const response = await readSmtpResponse(socket);
     if (response.code !== expectedCode) {
         throw new Error(`SMTP respondeu com ${response.code} quando ${expectedCode} era esperado: ${response.message}`);
     }
 }
+// Lê respostas SMTP do socket até encontrar a linha final do código (ex.: "250 ...") e retorna código+mensagem.
 async function readSmtpResponse(socket) {
     return await new Promise((resolve, reject) => {
         let buffer = "";
@@ -385,6 +565,7 @@ async function readSmtpResponse(socket) {
         socket.on("close", onClose);
     });
 }
+// Monta um e-mail RFC822 "cru" com boundary multipart (texto + HTML) a partir dos dados informados.
 function buildRawEmail({ fromEmail, fromName, to, subject, text, html, }) {
     const boundary = `mescla-${Date.now()}`;
     return [
@@ -407,6 +588,7 @@ function buildRawEmail({ fromEmail, fromName, to, subject, text, html, }) {
         `--${boundary}--`,
     ].join("\r\n");
 }
+// Escapa conteúdo do corpo para evitar que linhas iniciadas com "." sejam interpretadas como fim do DATA no SMTP.
 function escapeSmtpData(message) {
     return message
         .replace(/\r?\n/g, "\r\n")

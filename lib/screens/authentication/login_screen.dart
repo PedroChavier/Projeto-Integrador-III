@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
 import 'password_recovery_screen.dart';
@@ -77,6 +78,11 @@ class _LoginScreenState extends State<LoginScreen> {
     _bloqueadoAte = null;
   }
 
+  void _limparCamposLogin() {
+    _emailController.clear();
+    _senhaController.clear();
+  }
+
   void _entrar() async {
     if (_loginBloqueado) {
       _mostrarErro(
@@ -88,14 +94,13 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final senha = _senhaController.text;
 
-    // Validação básica
     if (email.isEmpty || senha.isEmpty) {
       _mostrarErro('Por favor, preencha todos os campos');
       return;
     }
 
     if (!_isValidEmail(email)) {
-      _mostrarErro('E-mail inválido');
+      _mostrarErro('E-mail invalido');
       return;
     }
 
@@ -123,7 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
           nomeUsuario == null ? 'Bem-vindo!' : 'Bem-vindo, $nomeUsuario!',
         );
 
-        // Navegar para tela inicial após 1.5 segundos
         await Future.delayed(const Duration(milliseconds: 1500));
         if (mounted) {
           Navigator.of(context).pushAndRemoveUntil(
@@ -142,7 +146,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       switch (e.code) {
         case 'user-not-found':
-          mensagem = 'Usuário não encontrado';
+          mensagem = 'email ou senha invalidos';
+          _limparCamposLogin();
           break;
         case 'wrong-password':
         case 'invalid-credential':
@@ -151,15 +156,15 @@ class _LoginScreenState extends State<LoginScreen> {
             mensagem =
                 'Acesso temporariamente bloqueado por seguranca. Tente novamente mais tarde.';
           } else {
-            mensagem =
-                'Nao foi possivel autenticar com as credenciais informadas.';
+            mensagem = 'email ou senha invalidos';
+            _limparCamposLogin();
           }
           break;
         case 'invalid-email':
-          mensagem = 'E-mail inválido';
+          mensagem = 'E-mail invalido';
           break;
         case 'user-disabled':
-          mensagem = 'Usuário desativado';
+          mensagem = 'Usuario desativado';
           break;
         case 'too-many-requests':
           mensagem = 'Muitas tentativas. Tente novamente mais tarde';
@@ -201,7 +206,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isValidEmail(String value) {
     return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value);
   }
-
 
   InputDecoration _inputDecoration({
     required String hint,
@@ -271,7 +275,6 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título
               const Text(
                 'Login',
                 style: TextStyle(
@@ -282,12 +285,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Insira seus dados para começar',
+                'Insira seus dados para comecar',
                 style: TextStyle(fontSize: 14, color: Colors.black45),
               ),
               const SizedBox(height: 48),
-
-              // Campo E-mail
               const Text(
                 'E-mail',
                 style: TextStyle(
@@ -307,8 +308,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Campo Senha
               const Text(
                 'Senha',
                 style: TextStyle(
@@ -340,15 +339,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // Esqueceu a senha
               Align(
                 alignment: Alignment.centerRight,
                 child: GestureDetector(
                   onTap: _isLoading
                       ? null
                       : () {
-                          final email = _emailController.text.trim().toLowerCase();
+                          final email =
+                              _emailController.text.trim().toLowerCase();
 
                           if (!_isValidEmail(email)) {
                             _mostrarErro(
@@ -384,8 +382,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-
-              // Botão Entrar
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -415,7 +411,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           _loginBloqueado
                               ? 'Bloqueado temporariamente'
                               : 'Entrar',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,

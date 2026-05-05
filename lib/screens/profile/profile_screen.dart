@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
+import '../initial/splash_screen.dart';
 import '../startups/startups_catalog_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
@@ -10,7 +12,8 @@ class PerfilScreen extends StatefulWidget {
 }
 
 class _PerfilScreenState extends State<PerfilScreen> {
-  bool _2faAtivado = false;
+  bool _2faativado = false;
+  final AuthService _authService = AuthService();
 
   @override
   Widget build(BuildContext context) {
@@ -178,9 +181,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                               Transform.scale(
                                 scale: 0.85,
                                 child: Switch(
-                                  value: _2faAtivado,
+                                  value: _2faativado,
                                   onChanged: (v) =>
-                                      setState(() => _2faAtivado = v),
+                                      setState(() => _2faativado = v),
                                   activeColor: Colors.white,
                                   activeTrackColor: const Color(0xFF9E9E9E),
                                   inactiveThumbColor: Colors.white,
@@ -229,8 +232,13 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
                   // ── Sair da conta ──
                   GestureDetector(
-                    onTap: () {
-                      // TODO: logout
+                    onTap: () async {
+                      await _authService.signOut();
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const SplashScreen()),
+                        (route) => false,
+                      );
                     },
                     child: const Text(
                       'Sair da conta',

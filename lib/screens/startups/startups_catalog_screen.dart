@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
 import '../home/home_screen.dart';
 import '../startups/startup_detail.dart';
+import '../../services/startup_service.dart';
 
 class StartupsScreen extends StatefulWidget {
   const StartupsScreen({super.key});
@@ -13,39 +16,59 @@ class _StartupsScreenState extends State<StartupsScreen> {
   final _searchController = TextEditingController();
   String _filtroSelecionado = 'Todas';
 
-  final List<String> _filtros = ['Todas', 'Nova', 'Em operação', 'Em expansão'];
+  final List<String> _filtros = 
+  ['Todas', 'Nova', 'Em operação', 'Em expansão'];
 
-  final List<Map<String, String>> _startups = [
-    {
-      'nome': 'AgroSense',
-      'descricao': 'Monitoramento Agrícola em IOT e analise preditiva de pequenos produtores rurais',
-      'status': 'Em expansão',
-      'tokens': '50k',
-      'capital': 'R\$ 180k',
-      'preco': 'R\$ 25,00',
-    },
-    {
-      'nome': 'AgroSense',
-      'descricao': 'Monitoramento Agrícola em IOT e analise preditiva de pequenos produtores rurais',
-      'status': 'Em operação',
-      'tokens': '50k',
-      'capital': 'R\$ 180k',
-      'preco': 'R\$ 25,00',
-    },
-    {
-      'nome': 'AgroSense',
-      'descricao': 'Monitoramento Agrícola em IOT e analise preditiva de pequenos produtores rurais',
-      'status': 'Nova',
-      'tokens': '50k',
-      'capital': 'R\$ 180k',
-      'preco': 'R\$ 25,00',
-    },
-  ];
+  final StartupService _startupService = StartupService();
 
-  List<Map<String, String>> get _startupsFiltradas {
+  List<StartupCatalogItem> _startups = const [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStartups();
+  }
+
+  Future<void> _loadStartups() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final startups = await _startupService.listarStartups();
+      if (!mounted) return;
+
+      setState(() {
+        _startups = startups;
+        _isLoading = false;
+      });
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        final details = e.details != null ? '\nDetalhes: ${e.details}' : '';
+        _errorMessage =
+            'Falha ao carregar startups (${e.code}): ${e.message ?? ''}$details';
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = 'Falha ao carregar startups: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<StartupCatalogItem> get _startupsFiltradas {
     return _startups.where((s) {
-      final matchFiltro = _filtroSelecionado == 'Todas' || s['status'] == _filtroSelecionado;
-      final matchSearch = s['nome']!.toLowerCase().contains(_searchController.text.toLowerCase());
+      final matchFiltro = _filtroSelecionado == 'Todas' || s.status == _filtroSelecionado;
+      final matchSearch =
+          s.nome.toLowerCase().contains(_searchController.text.toLowerCase());
       return matchFiltro && matchSearch;
     }).toList();
   }
@@ -84,12 +107,14 @@ class _StartupsScreenState extends State<StartupsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _startupsFiltradas;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F7),
       body: SafeArea(
         child: Column(
           children: [
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Container(
               height: 2,
               decoration: const BoxDecoration(
@@ -99,86 +124,113 @@ class _StartupsScreenState extends State<StartupsScreen> {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Startups',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEEEEE),
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (_) => setState(() {}),
-                        style: const TextStyle(fontSize: 14, color: Colors.black87),
-                        decoration: const InputDecoration(
-                          hintText: 'Buscar Startup',
-                          hintStyle: TextStyle(color: Colors.black38, fontSize: 14),
-                          prefixIcon: Icon(Icons.search, color: Colors.black38, size: 20),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(vertical: 13),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _errorMessage!,
+                                  style: const TextStyle(fontSize: 14, color: Colors.black54),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 5,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: _loadStartups,
+                                  child: const Text('Tentar novamente'),
+                                )
+                              ],
+                            ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Startups',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              Container(
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEEEEEE),
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged: (_) => setState(() {}),
+                                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Buscar Startup',
+                                    hintStyle: TextStyle(color: Colors.black38, fontSize: 14),
+                                    prefixIcon: Icon(Icons.search, color: Colors.black38, size: 20),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(vertical: 13),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _filtros.map((filtro) {
+                                  final selected = _filtroSelecionado == filtro;
+                                  return GestureDetector(
+                                    onTap: () => setState(() => _filtroSelecionado = filtro),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: selected ? const Color(0xFFD7DEEC) : Colors.white,
+                                        borderRadius: BorderRadius.circular(30),
+                                        border: Border.all(
+                                          color: selected ? const Color(0xFF234794) : const Color(0xFFDDDDDD),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        filtro,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: selected ? const Color.fromARGB(255, 10, 10, 160) : Colors.black54,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 20),
+                              ...filtered.map(
+                                (startup) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  child: _StartupCard(
+                                    nome: startup.nome,
+                                    descricao: startup.descricao,
+                                    status: startup.status,
+                                    tokens: startup.tokens,
+                                    capital: startup.capital,
+                                    preco: startup.preco,
+                                    tagColor: _tagColor(startup.status),
+                                    tagTextColor: _tagTextColor(startup.status),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _filtros.map((filtro) {
-                        final selected = _filtroSelecionado == filtro;
-                        return GestureDetector(
-                          onTap: () => setState(() => _filtroSelecionado = filtro),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: selected ? const Color(0xFFD7DEEC) : Colors.white,
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(
-                                color: selected ? const Color(0xFF234794) : const Color(0xFFDDDDDD),
-                              ),
-                            ),
-                            child: Text(
-                              filtro,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: selected ? const Color.fromARGB(255, 10, 10, 160) : Colors.black54,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 20),
-                    ..._startupsFiltradas.map((startup) => Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: _StartupCard(
-                            nome: startup['nome']!,
-                            descricao: startup['descricao']!,
-                            status: startup['status']!,
-                            tokens: startup['tokens']!,
-                            capital: startup['capital']!,
-                            preco: startup['preco']!,
-                            tagColor: _tagColor(startup['status']!),
-                            tagTextColor: _tagTextColor(startup['status']!),
-                          ),
-                        )),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
             ),
           ],
         ),
@@ -331,7 +383,7 @@ class _BottomNav extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
+            color: Colors.black.withValues(alpha: 0.07),
             blurRadius: 12,
             offset: const Offset(0, -2),
           ),
@@ -343,11 +395,36 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _NavItem(icon: Icons.home_outlined, label: 'Home', index: 0, selected: selected),
-              _NavItem(icon: Icons.grid_view_outlined, label: 'Startups', index: 1, selected: selected),
-              _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Carteira', index: 2, selected: selected),
-              _NavItem(icon: Icons.swap_horiz_outlined, label: 'Balcão', index: 3, selected: selected),
-              _NavItem(icon: Icons.trending_up_outlined, label: 'DashBoard', index: 4, selected: selected),
+              _NavItem(
+                icon: Icons.home_outlined,
+                label: 'Home',
+                index: 0,
+                selected: selected,
+              ),
+              _NavItem(
+                icon: Icons.grid_view_outlined,
+                label: 'Startups',
+                index: 1,
+                selected: selected,
+              ),
+              _NavItem(
+                icon: Icons.account_balance_wallet_outlined,
+                label: 'Carteira',
+                index: 2,
+                selected: selected,
+              ),
+              _NavItem(
+                icon: Icons.swap_horiz_outlined,
+                label: 'Balcão',
+                index: 3,
+                selected: selected,
+              ),
+              _NavItem(
+                icon: Icons.trending_up_outlined,
+                label: 'DashBoard',
+                index: 4,
+                selected: selected,
+              ),
             ],
           ),
         ),

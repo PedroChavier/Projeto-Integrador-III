@@ -1,6 +1,7 @@
 import 'dart:async'; //usado para o timer (contagem regressiva)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; //usado para limitar a entrada so a numeros
+import '../home/home_screen.dart';
 
 class Verificacao2FAScreen extends StatefulWidget {
   const Verificacao2FAScreen({super.key});
@@ -10,13 +11,13 @@ class Verificacao2FAScreen extends StatefulWidget {
 }
 
 class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
-  static const int _totalDigitos = 5; //quantidade de campos
+  static const int _totalDigitos = 6; //quantidade de campos
   static const int _tempoInicial = 50; //tempo inicial do contador
 
   //controla o texto digitado em cada caixinha
   final List<TextEditingController> _controllers =
       List.generate(_totalDigitos, (_) => TextEditingController());
-  //controla o foco (qual caixinha está ativa)
+  //controla o foco (qual caixinha esta ativa)
   final List<FocusNode> _focusNodes =
       List.generate(_totalDigitos, (_) => FocusNode());
 
@@ -28,7 +29,7 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
     super.initState();
     _iniciarTimer();
     //coloca o cursor automaticamente no primeiro campo
-    WidgetsBinding.instance.addPostFrameCallback((_) { 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNodes[0].requestFocus();
     });
   }
@@ -50,29 +51,48 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
 
   //chamado quando o usuario digita algo
   void _onDigitChanged(int index, String value) {
-
     //se digitou 1 numero, vai para a proxima caixa
     if (value.length == 1 && index < _totalDigitos - 1) {
       _focusNodes[index + 1].requestFocus();
-    
-    //se apagou, volta para a anterior
+
+      //se apagou, volta para a anterior
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-    setState(() {}); //atualiza o botão
+    setState(() {}); //atualiza o botao
   }
 
   //verifica se todas as caixas foram preenchidas
-  bool get _codigoCompleto =>
-      _controllers.every((c) => c.text.isNotEmpty);
+  bool get _codigoCompleto => _controllers.every((c) => c.text.isNotEmpty);
 
   void _confirmar() {
-    if (!_codigoCompleto) return; 
+    if (!_codigoCompleto) return;
 
     //junta todos os numeros digitados
     final codigo = _controllers.map((c) => c.text).join();
-    debugPrint('Código 2FA: $codigo');
-    // TODO: validar código e navegar
+    debugPrint('Codigo 2FA: $codigo');
+
+    if (codigo != '123456') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Codigo invalido. Tente novamente.'),
+          backgroundColor: Colors.red[400],
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Codigo validado com sucesso!'),
+        backgroundColor: Colors.green[400],
+      ),
+    );
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
   }
 
   void _reenviar() {
@@ -91,8 +111,8 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
   void dispose() {
     _timer?.cancel(); //cancela o time ao sair da tela
 
-    //libera as memorias 
-    for (final c in _controllers) c.dispose(); 
+    //libera as memorias
+    for (final c in _controllers) c.dispose();
     for (final f in _focusNodes) f.dispose();
     super.dispose();
   }
@@ -120,7 +140,11 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
             height: 2,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF6C63FF), Color(0xFFE040FB), Color(0xFFFF6B6B)],
+                colors: [
+                  Color(0xFF6C63FF),
+                  Color(0xFFE040FB),
+                  Color(0xFFFF6B6B),
+                ],
               ),
             ),
           ),
@@ -132,9 +156,9 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título
+              // Titulo
               const Text(
-                'Verificação 2FA',
+                'Verificacao 2FA',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
@@ -163,9 +187,13 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
                   children: [
                     RichText(
                       text: const TextSpan(
-                        style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                          height: 1.5,
+                        ),
                         children: [
-                          TextSpan(text: 'Este usuário possui '),
+                          TextSpan(text: 'Este usuario possui '),
                           TextSpan(
                             text: '2FA ativado.',
                             style: TextStyle(
@@ -178,15 +206,19 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'A autenticação multifator é opcional, desabilite em perfil se necessário',
-                      style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.4),
+                      'A autenticacao multifator e opcional, desabilite em perfil se necessario',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 48),
 
-              // Instrução + timer
+              // Instrucao + timer
               Center(
                 child: Column(
                   children: [
@@ -201,7 +233,10 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
                     const SizedBox(height: 6),
                     RichText(
                       text: TextSpan(
-                        style: const TextStyle(fontSize: 13, color: Colors.black45),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black45,
+                        ),
                         children: [
                           const TextSpan(text: 'o codigo expira em '),
                           TextSpan(
@@ -219,18 +254,21 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
               ),
               const SizedBox(height: 28),
 
-              // Campos de dígito
+              // Campos de digito
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(_totalDigitos, (i) => _DigitBox(
-                  controller: _controllers[i],
-                  focusNode: _focusNodes[i],
-                  onChanged: (v) => _onDigitChanged(i, v),
-                )),
+                children: List.generate(
+                  _totalDigitos,
+                  (i) => _DigitBox(
+                    controller: _controllers[i],
+                    focusNode: _focusNodes[i],
+                    onChanged: (v) => _onDigitChanged(i, v),
+                  ),
+                ),
               ),
               const SizedBox(height: 36),
 
-              // Botão confirmar
+              // Botao confirmar
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -257,12 +295,12 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Reenviar código
+              // Reenviar codigo
               Center(
                 child: GestureDetector(
                   onTap: _reenviar,
                   child: const Text(
-                    'Reenviar Código',
+                    'Reenviar Codigo',
                     style: TextStyle(
                       fontSize: 14,
                       color: Color(0xFF6C63FF),
@@ -280,7 +318,7 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
   }
 }
 
-//  Caixa de dígito 
+//  Caixa de digito
 class _DigitBox extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -299,26 +337,23 @@ class _DigitBox extends StatelessWidget {
     return SizedBox(
       width: 52,
       height: 58,
-
       child: TextField(
         controller: controller,
         focusNode: focusNode,
         onChanged: onChanged,
-
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
         maxLength: 1,
-
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly], //só numeros
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly], //so numeros
         style: const TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w700,
           color: Colors.black87,
         ),
-
         decoration: InputDecoration(
           counterText: '', //remove o contador de caracteres
-          contentPadding: EdgeInsets.zero, // remove espaço interno padrao (deixa mais compacto)
+          contentPadding:
+              EdgeInsets.zero, // remove espaco interno padrao (deixa mais compacto)
 
           //bordas da caixinha
           border: OutlineInputBorder(
@@ -328,14 +363,14 @@ class _DigitBox extends StatelessWidget {
             ),
           ),
 
-          //borda quando NÃO esta selecionado
+          //borda quando NAO esta selecionado
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(
               color: hasValue ? Colors.green : const Color(0xFFDDDDDD),
             ),
           ),
-          
+
           //borda quando o usuario clica na caixa
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
