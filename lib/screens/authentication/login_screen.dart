@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
 import 'password_recovery_screen.dart';
+import 'verify_otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -60,6 +61,41 @@ class _LoginScreenState extends State<LoginScreen> {
         senha: senha,
       );
 
+      final user = userCredential.user;
+      if (user != null) {
+        try {
+          final isMfaEnabled = await _authService.isMultiFactorEnabled(user);
+          if (isMfaEnabled) {
+            final phone = await _authService.getPhoneForMFA(user);
+            if (phone == null || phone.isEmpty) {
+              await _authService.signOut();
+              _mostrarErro('Conta com 2FA ativado, mas telefone não encontrado.');
+              return;
+            }
+
+            try {
+              final verificationId = await _authService.sendMFACode(phoneNumber: phone);
+              if (mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => VerifyOTPScreen(
+                      verificationId: verificationId,
+                      phoneNumber: phone,
+                    ),
+                  ),
+                );
+              }
+              return;
+            } on FirebaseAuthException catch (e) {
+              _mostrarErro('Erro ao enviar código 2FA: ${e.message}');
+              return;
+            }
+          }
+        } catch (e) {
+          debugPrint('Erro ao verificar status 2FA: $e');
+        }
+      }
+
       if (mounted) {
         _mostrarSucesso('Bem-vindo, ${userCredential.user?.email}!');
 
@@ -90,6 +126,9 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
         case 'too-many-requests':
           mensagem = 'Muitas tentativas. Tente novamente mais tarde';
+          break;
+        case 'multi-factor-auth-required':
+          mensagem = 'Verificação de dois fatores necessária';
           break;
         default:
           mensagem = e.message ?? 'Erro desconhecido';
