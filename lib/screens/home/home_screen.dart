@@ -4,6 +4,8 @@ import '../profile/profile_screen.dart';
 import '../wallet/wallet_screen.dart';
 import '../balcao/balcao_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../../services/auth_service.dart';
+import '../../models/user_profile.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -105,44 +107,84 @@ class HomeScreen extends StatelessWidget {
 }
 
 // ── Header ────────────────────────────────────────────────────
-class _Header extends StatelessWidget {
+class _Header extends StatefulWidget {
+  @override
+  State<_Header> createState() => _HeaderState();
+}
+
+class _HeaderState extends State<_Header> {
+  final AuthService _authService = AuthService();
+  Future<UserProfile?>? _perfilFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _perfilFuture = _authService.getCurrentUserProfile();
+  }
+
+  String _primeiroNome(String? nome) {
+    if (nome == null || nome.trim().isEmpty) return '';
+    return nome.trim().split(RegExp(r'\s+')).first;
+  }
+
+  String _iniciais(String? nome) {
+    if (nome == null || nome.trim().isEmpty) return '';
+    final partes = nome.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (partes.length >= 2) return '${partes[0][0]}${partes[1][0]}'.toUpperCase();
+    return partes[0][0].toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text(
-          'Olá, Ana',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
-          ),
-        ),
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PerfilScreen()),
-          ),
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: const BoxDecoration(
-              color: Color(0xFFD1CEFF),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'AN',
-              style: TextStyle(
-                fontSize: 14,
+    return FutureBuilder<UserProfile?>(
+      future: _perfilFuture,
+      builder: (context, snapshot) {
+        final nome = snapshot.data?.fullName ?? '';
+        final iniciais = _iniciais(nome);
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              nome.isNotEmpty ? 'Olá, ${_primeiroNome(nome)}' : 'Olá!',
+              style: const TextStyle(
+                fontSize: 28,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF6C63FF),
+                color: Colors.black87,
               ),
             ),
-          ),
-        ),
-      ],
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PerfilScreen()),
+              ),
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFD1CEFF),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: iniciais.isNotEmpty
+                    ? Text(
+                        iniciais,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF6C63FF),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person,
+                        size: 22,
+                        color: Color(0xFF6C63FF),
+                      ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
