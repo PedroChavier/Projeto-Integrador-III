@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../models/startup.dart';
 
 class StartupCatalogItem {
+  final String uid;
   final String nome;
   final String descricao;
   final String status;
@@ -10,6 +12,7 @@ class StartupCatalogItem {
   final String preco;
 
   const StartupCatalogItem({
+    required this.uid,
     required this.nome,
     required this.descricao,
     required this.status,
@@ -18,8 +21,9 @@ class StartupCatalogItem {
     required this.preco,
   });
 
-  factory StartupCatalogItem.fromMap(Map<String, dynamic> map) {
+  factory StartupCatalogItem.fromMap(Map<String, dynamic> map, {String uid = ''}) {
     return StartupCatalogItem(
+      uid: uid,
       nome: _readString(map['nome']),
       descricao: _readString(map['descricao']),
       status: _readString(map['status']),
@@ -43,6 +47,7 @@ class StartupService {
   final FirebaseFirestore _firestore;
   final String _collectionPath;
 
+  // ── Catálogo (existente) ──────────────────────────────────────
   Future<List<StartupCatalogItem>> listarStartups() async {
     try {
       return await _listarViaCallable();
@@ -58,14 +63,10 @@ class StartupService {
     final result = await callable.call(<String, dynamic>{});
     final data = result.data as Object?;
 
-    if (data is! Map<Object?, Object?>) {
-      return const [];
-    }
+    if (data is! Map<Object?, Object?>) return const [];
 
     final startups = data['startups'];
-    if (startups is! List<Object?>) {
-      return const [];
-    }
+    if (startups is! List<Object?>) return const [];
 
     return startups
         .whereType<Map<Object?, Object?>>()
@@ -88,6 +89,7 @@ class StartupService {
       final precoToken = _readNum(data['precoToken'] ?? data['preco_token']);
 
       return StartupCatalogItem(
+        uid: doc.id,
         nome: _readString(data['nome'], fallback: doc.id),
         descricao: _readString(
           data['descricao'],
@@ -102,8 +104,16 @@ class StartupService {
       );
     }).toList();
   }
+
+  // ── Detalhe da startup (novo) ─────────────────────────────────
+  Future<Startup?> getStartup(String uid) async {
+    final doc = await _firestore.collection(_collectionPath).doc(uid).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return Startup.fromFirestore(doc.id, doc.data()!);
+  }
 }
 
+// ── Funções auxiliares (sem alteração) ───────────────────────────
 String _readString(Object? value, {String fallback = ''}) {
   if (value is String) return value;
   if (value is num) return value.toString();
@@ -125,21 +135,11 @@ Map<String, dynamic> _toStringDynamicMap(Map<Object?, Object?> source) {
 String _normalizeStatus(Object? value) {
   final raw = _readString(value).toLowerCase();
   final normalized = raw
-      .replaceAll('ã', 'a')
-      .replaceAll('á', 'a')
-      .replaceAll('à', 'a')
-      .replaceAll('â', 'a')
-      .replaceAll('ç', 'c')
-      .replaceAll('é', 'e')
-      .replaceAll('ê', 'e')
-      .replaceAll('í', 'i')
-      .replaceAll('ó', 'o')
-      .replaceAll('ô', 'o')
-      .replaceAll('õ', 'o')
-      .replaceAll('ú', 'u')
-      .replaceAll('-', '')
-      .replaceAll('_', '')
-      .replaceAll(' ', '');
+      .replaceAll('ã', 'a').replaceAll('á', 'a').replaceAll('à', 'a')
+      .replaceAll('â', 'a').replaceAll('ç', 'c').replaceAll('é', 'e')
+      .replaceAll('ê', 'e').replaceAll('í', 'i').replaceAll('ó', 'o')
+      .replaceAll('ô', 'o').replaceAll('õ', 'o').replaceAll('ú', 'u')
+      .replaceAll('-', '').replaceAll('_', '').replaceAll(' ', '');
 
   if (normalized.contains('operacao')) return 'Em operação';
   if (normalized.contains('expansao')) return 'Em expansão';
@@ -148,18 +148,8 @@ String _normalizeStatus(Object? value) {
 
 String _formatCompact(double value) {
   final abs = value.abs();
-
-  if (abs >= 1000000000) {
-    return '${(value / 1000000000).round()}B';
-  }
-
-  if (abs >= 1000000) {
-    return '${(value / 1000000).round()}M';
-  }
-
-  if (abs >= 1000) {
-    return '${(value / 1000).round()}k';
-  }
-
+  if (abs >= 1000000000) return '${(value / 1000000000).round()}B';
+  if (abs >= 1000000) return '${(value / 1000000).round()}M';
+  if (abs >= 1000) return '${(value / 1000).round()}k';
   return value.round().toString();
 }

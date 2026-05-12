@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-//importa as abas que serao exibidas dentro do detalhe da startup
 import '../startups/startup_overview.dart';
 import '../startups/startup_society.dart';
 import '../startups/startup_documents.dart';
 import '../startups/startup_questions.dart';
 import '../home/home_screen.dart';
 import '../balcao/balcao_screen.dart';
+import '../../models/startup.dart';
+import '../../services/startup_service.dart';
 
-
-//Tela principal
 class StartupDetalheScreen extends StatefulWidget {
-  const StartupDetalheScreen({super.key});
+  final String startupUid;
+
+  const StartupDetalheScreen({super.key, required this.startupUid});
 
   @override
   State<StartupDetalheScreen> createState() => _StartupDetalheScreenState();
@@ -18,222 +19,253 @@ class StartupDetalheScreen extends StatefulWidget {
 
 class _StartupDetalheScreenState extends State<StartupDetalheScreen>
     with SingleTickerProviderStateMixin {
-  
-  //controlador das tabs
   late TabController _tabController;
+  final StartupService _service = StartupService();
+  Startup? _startup;
+  bool _carregando = true;
 
   @override
   void initState() {
     super.initState();
-    //inicializa o controller com 4 abas
     _tabController = TabController(length: 4, vsync: this);
-    
+    _carregarStartup();
+  }
+
+  Future<void> _carregarStartup() async {
+    try {
+      final startup = await _service.getStartup(widget.startupUid);
+      if (mounted) setState(() { _startup = startup; _carregando = false; });
+    } catch (_) {
+      if (mounted) setState(() => _carregando = false);
+    }
   }
 
   @override
   void dispose() {
-    //libera o controller ao sair da pagina
     _tabController.dispose();
     super.dispose();
   }
 
+  String _formatarCapital(double valor) {
+    if (valor >= 1000000) return 'R\$ ${(valor / 1000000).toStringAsFixed(1)}M';
+    if (valor >= 1000) return 'R\$ ${(valor / 1000).toStringAsFixed(0)}K';
+    return 'R\$ ${valor.toStringAsFixed(0)}';
+  }
+
+  Color _tagColor(String status) {
+    switch (status) {
+      case 'Em expansão':
+        return const Color(0xFFFFF3E0);
+      case 'Em operação':
+        return const Color(0xFFE8F5E9);
+      case 'Nova':
+        return const Color(0xFFE8E6FF);
+      default:
+        return const Color(0xFFEEEEEE);
+    }
+  }
+
+  Color _tagTextColor(String status) {
+    switch (status) {
+      case 'Em expansão':
+        return const Color(0xFFE65100);
+      case 'Em operação':
+        return const Color(0xFF2E7D32);
+      case 'Nova':
+        return const Color(0xFF6C63FF);
+      default:
+        return Colors.black54;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final s = _startup;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F7),
       body: Column(
         children: [
-          // Header fixo, nao rola com o conteudo
           Container(
             color: Colors.white,
             child: SafeArea(
-              bottom: false, //eveita espaço em baixo
+              bottom: false,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 20),
-                  
-                  // Seta voltar
+                  const SizedBox(height: 20),
                   IconButton(
                     icon: const Icon(Icons.arrow_back,
-                        color: Color.fromARGB(221, 0, 0, 0), size: 22),
-
-                    //volta para a tela anterior
+                        color: Colors.black87, size: 22),
                     onPressed: () => Navigator.maybePop(context),
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                     constraints: const BoxConstraints(),
                   ),
-
-                  // Nome da startup + categoria + status
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        //nome + segmento
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'AgroSense',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Agritech - IoT - Sensores',
-                              style: TextStyle(
-                                  fontSize: 13, color: Colors.black45),
-                            ),
-                          ],
-                        ),
-
-                        //tag de status da startup
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF3E0),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Em expansão',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFE65100),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Barra de progresso de capitação
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text('Capital captado',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.black45)),
-                            Text('R\$ 180K / 250K',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.black45)),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-
-                        //barra de progresso
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: Stack(
+                  if (_carregando)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                height: 5,
-                                color: const Color(0xFFEEEEEE),
-                              ),
-                              FractionallySizedBox(
-                                widthFactor: 0.72, // 72% preenchida
-                                child: Container(
-                                  height: 5,
-                                  decoration: const BoxDecoration(
-                                  color:  Color.fromARGB(143, 26, 34, 126),
-                                  ),
+                              Text(
+                                s?.nome ?? '',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black87,
                                 ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                s?.setor ?? '',
+                                style: const TextStyle(
+                                    fontSize: 13, color: Colors.black45),
                               ),
                             ],
                           ),
-                        ),
-                      ],
+                          if (s?.status != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _tagColor(s!.status!),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                s.status!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _tagTextColor(s.status!),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  // Botões Comprar / Vender
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.push(
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Capital captado',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black45)),
+                              Text(
+                                s == null
+                                    ? ''
+                                    : '${_formatarCapital(s.cptAportado)} / ${_formatarCapital(s.metaCapital)}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black45),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Stack(
+                              children: [
+                                Container(
+                                    height: 5,
+                                    color: const Color(0xFFEEEEEE)),
+                                FractionallySizedBox(
+                                  widthFactor: s?.progressoCapital ?? 0,
+                                  child: Container(
+                                    height: 5,
+                                    decoration: const BoxDecoration(
+                                      color: Color.fromARGB(143, 26, 34, 126),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const BalcaoScreen(abaInicial: 0),
+                                  builder: (_) =>
+                                      const BalcaoScreen(abaInicial: 0),
                                 ),
-                              );
-                            },
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color:  Color(0xFF1A237E)),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: const Text(
-                              'Comprar',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color:  Color(0xFF1A237E),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFF1A237E)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text(
+                                'Comprar',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1A237E),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const BalcaoScreen(abaInicial: 1),
+                                  builder: (_) =>
+                                      const BalcaoScreen(abaInicial: 1),
                                 ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:  Color(0xFF1A237E),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              'Vender',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1A237E),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                'Vender',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 4),
-                  // TabBar
                   TabBar(
                     controller: _tabController,
                     labelStyle: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w600),
-                    unselectedLabelStyle:
-                        const TextStyle(fontSize: 13),
-                    labelColor:  Color(0xFF1A237E),
+                    unselectedLabelStyle: const TextStyle(fontSize: 13),
+                    labelColor: const Color(0xFF1A237E),
                     unselectedLabelColor: Colors.black45,
-                    indicatorColor: Color.fromARGB(143, 26, 34, 126),
+                    indicatorColor: const Color.fromARGB(143, 26, 34, 126),
                     indicatorWeight: 2,
                     tabs: const [
                       Tab(text: 'Visão Geral'),
@@ -246,25 +278,20 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
               ),
             ),
           ),
-
-          // ── Conteúdo das abas ─────────────────────────────────
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: const [
-                VisaoGeralTab(),
-                SociedadeTab(),
-                PerguntasTab(),
-                DocumentosTab(),
+              children: [
+                VisaoGeralTab(startup: _startup),
+                const SociedadeTab(),
+                const PerguntasTab(),
+                const DocumentosTab(),
               ],
             ),
           ),
-
-          // ── Bottom Nav ────────────────────────────────────────
         ],
       ),
       bottomNavigationBar: const AppBottomNav(currentIndex: 1),
     );
   }
 }
-

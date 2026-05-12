@@ -261,6 +261,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
                                 (startup) => Padding(
                                   padding: const EdgeInsets.only(bottom: 14),
                                   child: _StartupCard(
+                                    uid: startup.uid, // ← adicione
                                     nome: startup.nome,
                                     descricao: startup.descricao,
                                     status: startup.status,
@@ -286,6 +287,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
 }
 
 class _StartupCard extends StatelessWidget {
+  final String uid; // ← adicione
   final String nome;
   final String descricao;
   final String status;
@@ -296,6 +298,7 @@ class _StartupCard extends StatelessWidget {
   final Color tagTextColor;
 
   const _StartupCard({
+    required this.uid, // ← adicione
     required this.nome,
     required this.descricao,
     required this.status,
@@ -312,7 +315,7 @@ class _StartupCard extends StatelessWidget {
       onTap: () => Navigator.push(
         context,
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const StartupDetalheScreen(),
+          pageBuilder: (_, __, ___) => StartupDetalheScreen(startupUid: uid), // ← passa o uid
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
         ),
