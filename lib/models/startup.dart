@@ -10,6 +10,7 @@ class Startup extends Empresa {
   String? _status;
   double _cptAportado = 0.0;
   double _precoToken = 0.0;
+  double _capitalMeta = 0.0;
   int _totalTokensEmitidos = 0;
   int _nmrInvestidores = 0;
   EstagioDesenvolvimento _estagioDesenvolvimento = EstagioDesenvolvimento.nova;
@@ -29,6 +30,7 @@ class Startup extends Empresa {
     String? status,
     double cptAportado = 0.0,
     double precoToken = 0.0,
+    double capitalMeta = 0.0,
     int nmrInvestidores = 0,
     EstagioDesenvolvimento? estagioDesenvolvimento,
     String? sumarioExecutivo,
@@ -41,6 +43,7 @@ class Startup extends Empresa {
         _status = status,
         _cptAportado = cptAportado,
         _precoToken = precoToken,
+        _capitalMeta = capitalMeta,
         _totalTokensEmitidos = totalTokensEmitidos,
         _nmrInvestidores = nmrInvestidores,
         _estagioDesenvolvimento =
@@ -57,6 +60,7 @@ class Startup extends Empresa {
   String? get status => _status;
   double get cptAportado => _cptAportado;
   double get precoToken => _precoToken;
+  double get capitalMeta => _capitalMeta;
   int get totalTokensEmitidos => _totalTokensEmitidos;
   int get nmrInvestidores => _nmrInvestidores;
   EstagioDesenvolvimento get estagioDesenvolvimento => _estagioDesenvolvimento;
@@ -72,6 +76,7 @@ class Startup extends Empresa {
   set status(String? value) => _status = value;
   set cptAportado(double value) => _cptAportado = value;
   set precoToken(double value) => _precoToken = value;
+  set capitalMeta(double value) => _capitalMeta = value;
   set totalTokensEmitidos(int value) => _totalTokensEmitidos = value;
   set nmrInvestidores(int value) => _nmrInvestidores = value;
   set estagioDesenvolvimento(EstagioDesenvolvimento value) =>
@@ -88,15 +93,15 @@ class Startup extends Empresa {
       descricao: data['descricao'] as String? ?? data['bio'] as String?,
       setor: data['setor'] as String?,
       status: data['status'] as String?,
-      precoToken:
-          (data['precoToken'] ?? data['preco_token'] ?? 0).toDouble(),
+      precoToken: (data['precoToken'] ?? data['preco_token'] ?? 0).toDouble(),
       totalTokensEmitidos:
           (data['tokensEmitidos'] ?? data['totalTokensEmitidos'] ?? 0) as int,
       nmrInvestidores: (data['nmrInvestidores'] ?? 0) as int,
       cptAportado:
           (data['cptAportado'] ?? data['capitalAportado'] ?? 0).toDouble(),
-      estagioDesenvolvimento: _parseEstagio(
-          data['estagioDesenvolvimento'] as String?),
+      capitalMeta: (data['capitalMeta'] ?? 0).toDouble(),
+      estagioDesenvolvimento:
+          _parseEstagio(data['estagioDesenvolvimento'] as String?),
       linksVideos: List<String>.from(data['linksVideos'] ?? []),
       membrosConselho: List<String>.from(data['membrosConselho'] ?? []),
       dataCriacao: (data['createdAt'] as Timestamp?)?.toDate(),
@@ -120,7 +125,8 @@ class Startup extends Empresa {
     return (_cptAportado / _totalTokensEmitidos) * 100;
   }
 
-  double get metaCapital => _totalTokensEmitidos * _precoToken;
+  double get metaCapital =>
+      _capitalMeta > 0 ? _capitalMeta : _totalTokensEmitidos * _precoToken;
 
   double get progressoCapital {
     if (metaCapital == 0) return 0;

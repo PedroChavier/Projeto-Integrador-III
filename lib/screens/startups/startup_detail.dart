@@ -181,15 +181,20 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                                 Container(
                                     height: 5,
                                     color: const Color(0xFFEEEEEE)),
-                                FractionallySizedBox(
-                                  widthFactor: s?.progressoCapital ?? 0,
-                                  child: Container(
-                                    height: 5,
-                                    decoration: const BoxDecoration(
-                                      color: Color.fromARGB(143, 26, 34, 126),
+                                    FractionallySizedBox(
+                                      widthFactor: s?.progressoCapital ?? 0,
+                                      child: Container(
+                                        height: 5,
+                                        decoration: const BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Color.fromARGB(255, 20, 16, 107),
+                                              Color.fromARGB(255, 140, 4, 104),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
                               ],
                             ),
                           ),

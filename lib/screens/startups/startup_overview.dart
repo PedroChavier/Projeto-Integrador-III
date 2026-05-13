@@ -86,61 +86,46 @@ class VisaoGeralTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: _abrirYoutube,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                height: 180,
-                width: double.infinity,
-                child: Stack(
-                  alignment: Alignment.center,
-                  fit: StackFit.expand,
-                  children: [
-                    Image.network(
-                      'https://images.unsplash.com/photo-1500382017468-9049fed747ef',
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          color: const Color(0xFFDDDDDD),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              color: Color(0xFF6C63FF),
-                              strokeWidth: 2,
-                            ),
+              onTap: _abrirYoutube,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  height: 180,
+                  width: double.infinity,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    fit: StackFit.expand,
+                    children: [
+                      Container(color: Colors.black),
+                      Center(
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white54, width: 1.5),
                           ),
-                        );
-                      },
-                      errorBuilder: (_, __, ___) =>
-                          Container(color: const Color(0xFFDDDDDD)),
-                    ),
-                    Container(color: Colors.black.withOpacity(0.30)),
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: const BoxDecoration(
-                          color: Color.fromARGB(255, 5, 5, 79),
-                          shape: BoxShape.circle,
+                          child: const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 32,
+                          ),
                         ),
-                        child: const Icon(Icons.play_arrow,
-                            color: Colors.white, size: 28),
                       ),
-                    ),
-                    Positioned(
-                      bottom: 8,
-                      left: 12,
-                      child: Text(
-                        s?.nome != null ? '${s!.nome} - Demo' : 'Demo',
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.white70),
+                      Positioned(
+                        bottom: 8,
+                        left: 12,
+                        child: Text(
+                          s?.nome != null ? '${s!.nome} - Demo' : 'Demo',
+                          style: const TextStyle(fontSize: 11, color: Colors.white70),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(height: 16),
         ],
       ),
