@@ -288,7 +288,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
               controller: _tabController,
               children: [
                 VisaoGeralTab(startup: _startup),
-                const SociedadeTab(),
+                SociedadeTab(startup: _startup),
                 const PerguntasTab(),
                 const DocumentosTab(),
               ],

@@ -2,6 +2,32 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'empresa.dart';
 import 'enums.dart';
 
+class Socio {
+  final String nome;
+  final String percentual;
+  Socio({required this.nome, required this.percentual});
+
+  factory Socio.fromMap(Map<String, dynamic> map) {
+    return Socio(
+      nome: (map['Nome'] ?? map['nome'] ?? '') as String,
+      percentual: (map['Percentual'] ?? map['percentual'] ?? '') as String,
+    );
+  }
+}
+
+class Membro {
+  final String nome;
+  final String cargo;
+  Membro({required this.nome, required this.cargo});
+
+  factory Membro.fromMap(Map<String, dynamic> map) {
+    return Membro(
+      nome: (map['Nome'] ?? map['nome'] ?? '') as String,
+      cargo: (map['Cargo'] ?? map['cargo'] ?? '') as String,
+    );
+  }
+}
+
 class Startup extends Empresa {
   String? _uid;
   String? _descricao;
@@ -17,6 +43,9 @@ class Startup extends Empresa {
   String? _sumarioExecutivo;
   List<String> _membrosConselho = [];
   List<String> _linksVideos = [];
+  List<Socio> _socios = [];
+  List<Membro> _membros = [];
+  List<Membro> _mentores = [];
 
   Startup({
     String? uid,
@@ -36,6 +65,9 @@ class Startup extends Empresa {
     String? sumarioExecutivo,
     List<String>? membrosConselho,
     List<String>? linksVideos,
+    List<Socio>? socios,
+    List<Membro>? membros,
+    List<Membro>? mentores,
   })  : _uid = uid,
         _descricao = descricao,
         _estSocietaria = estSocietaria,
@@ -50,7 +82,10 @@ class Startup extends Empresa {
             estagioDesenvolvimento ?? EstagioDesenvolvimento.nova,
         _sumarioExecutivo = sumarioExecutivo,
         _membrosConselho = membrosConselho ?? [],
-        _linksVideos = linksVideos ?? [];
+        _linksVideos = linksVideos ?? [],
+        _socios = socios ?? [],
+        _membros = membros ?? [],
+        _mentores = mentores ?? [];
 
   // ── Getters ───────────────────────────────────────────────────
   String? get uid => _uid;
@@ -67,6 +102,9 @@ class Startup extends Empresa {
   String? get sumarioExecutivo => _sumarioExecutivo;
   List<String> get membrosConselho => _membrosConselho;
   List<String> get linksVideos => _linksVideos;
+  List<Socio> get socios => _socios;
+  List<Membro> get membros => _membros;
+  List<Membro> get mentores => _mentores;
 
   // ── Setters ───────────────────────────────────────────────────
   set uid(String? value) => _uid = value;
@@ -84,9 +122,28 @@ class Startup extends Empresa {
   set sumarioExecutivo(String? value) => _sumarioExecutivo = value;
   set membrosConselho(List<String> value) => _membrosConselho = value;
   set linksVideos(List<String> value) => _linksVideos = value;
+  set socios(List<Socio> value) => _socios = value;
+  set membros(List<Membro> value) => _membros = value;
+  set mentores(List<Membro> value) => _mentores = value;
 
   // ── fromFirestore ─────────────────────────────────────────────
   factory Startup.fromFirestore(String uid, Map<String, dynamic> data) {
+    List<Socio> parseSocios(dynamic raw) {
+      if (raw is! List) return [];
+      return raw
+          .whereType<Map>()
+          .map((e) => Socio.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
+    List<Membro> parseMembros(dynamic raw) {
+      if (raw is! List) return [];
+      return raw
+          .whereType<Map>()
+          .map((e) => Membro.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
     return Startup(
       uid: uid,
       nome: data['nome'] as String?,
@@ -102,9 +159,14 @@ class Startup extends Empresa {
       capitalMeta: (data['capitalMeta'] ?? 0).toDouble(),
       estagioDesenvolvimento:
           _parseEstagio(data['estagioDesenvolvimento'] as String?),
-      linksVideos: List<String>.from(data['linksVideos'] ?? []),
-      membrosConselho: List<String>.from(data['membrosConselho'] ?? []),
       dataCriacao: (data['createdAt'] as Timestamp?)?.toDate(),
+      socios: parseSocios(data['Socios'] ?? data['socios']),
+      membros: parseMembros(data['Membros'] ?? data['membros']),
+      mentores: parseMembros(data['Mentores'] ?? data['mentores']),
+      linksVideos: List<String>.from(
+          data['linksVideos'] ?? data['LinksVideos'] ?? []),
+      membrosConselho: List<String>.from(
+          data['membrosConselho'] ?? data['MembrosConselho'] ?? []),
     );
   }
 
