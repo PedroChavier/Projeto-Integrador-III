@@ -289,7 +289,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
               children: [
                 VisaoGeralTab(startup: _startup),
                 SociedadeTab(startup: _startup),
-                const PerguntasTab(),
+                PerguntasTab(startup: _startup),
                 const DocumentosTab(),
               ],
             ),
