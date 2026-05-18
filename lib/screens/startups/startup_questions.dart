@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/pergunta.dart';
 import '../../models/startup.dart';
-import '../../services/pergunta_service.dart';
+import '../../services/questions_service.dart';
 import '../../services/auth_service.dart';
 
 class PerguntasTab extends StatefulWidget {
