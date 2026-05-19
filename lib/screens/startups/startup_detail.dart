@@ -290,7 +290,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                 VisaoGeralTab(startup: _startup),
                 SociedadeTab(startup: _startup),
                 PerguntasTab(startup: _startup),
-                const DocumentosTab(),
+                DocumentosTab(startup: _startup),
               ],
             ),
           ),
