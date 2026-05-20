@@ -38,6 +38,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /usuarios/{userId}/transacoes/{transacaoId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update, delete: if false;
+    }
+
     match /2fa_settings/{userId} {
       allow read, write: if isOwner(userId);
     }

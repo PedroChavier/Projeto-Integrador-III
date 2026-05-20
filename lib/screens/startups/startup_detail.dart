@@ -4,8 +4,8 @@ import '../startups/startup_society.dart';
 import '../startups/startup_documents.dart';
 import '../startups/startup_questions.dart';
 import '../home/home_screen.dart';
-import '../balcao/balcao_screen.dart';
 import '../../models/startup.dart';
+import '../../services/auth_service.dart';
 import '../../services/startup_service.dart';
 
 class StartupDetalheScreen extends StatefulWidget {
@@ -21,8 +21,10 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final StartupService _service = StartupService();
+  final AuthService _authService = AuthService();
   Startup? _startup;
   bool _carregando = true;
+  bool _comprando = false;
 
   @override
   void initState() {
@@ -75,6 +77,159 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
         return const Color(0xFF6C63FF);
       default:
         return Colors.black54;
+    }
+  }
+
+  String _formatarPreco(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  Future<void> _abrirCompraDireta() async {
+    final startup = _startup;
+    if (startup == null || _comprando) return;
+
+    final quantidadeController = TextEditingController(text: '1');
+    double? saldoAtual;
+
+    try {
+      // Buscar saldo atual do usuário
+      final profile = await _authService.getCurrentUserProfile();
+      saldoAtual = profile?.saldo ?? 0.0;
+
+      final confirmado = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              final quantidade =
+                  int.tryParse(quantidadeController.text.trim()) ?? 0;
+              final total = quantidade > 0
+                  ? quantidade * startup.precoToken
+                  : 0.0;
+              final saldoPosCom = (saldoAtual ?? 0.0) - total;
+              final saldoInsuficiente = total > (saldoAtual ?? 0.0) && total > 0;
+
+              return AlertDialog(
+                title: const Text('Comprar tokens'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      startup.nome ?? 'Startup',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Preço atual: ${_formatarPreco(startup.precoToken)} por token',
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: quantidadeController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Quantidade',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Total estimado: ${_formatarPreco(total)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Saldo atual: ${_formatarPreco(saldoAtual ?? 0.0)}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Saldo após compra: ${_formatarPreco(saldoPosCom.clamp(0, double.infinity))}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: saldoInsuficiente
+                                  ? Colors.redAccent
+                                  : const Color(0xFF2E7D32),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Cancelar'),
+                  ),
+                  ElevatedButton(
+                    onPressed: saldoInsuficiente
+                        ? null
+                        : () {
+                            final parsed =
+                                int.tryParse(quantidadeController.text.trim()) ?? 0;
+                            if (parsed <= 0) {
+                              return;
+                            }
+                            Navigator.pop(dialogContext, true);
+                          },
+                    child: const Text('Confirmar compra'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (confirmado != true || !mounted) return;
+
+      final quantidade = int.parse(quantidadeController.text.trim());
+
+      setState(() {
+        _comprando = true;
+      });
+
+      await _authService.comprarTokensStartup(
+        startupUid: widget.startupUid,
+        quantidade: quantidade,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Compra concluida: $quantidade token(s) de ${startup.nome ?? 'startup'}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+    } finally {
+      quantidadeController.dispose();
+      if (mounted) {
+        setState(() {
+          _comprando = false;
+        });
+      }
     }
   }
 
@@ -208,52 +363,48 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const BalcaoScreen(abaInicial: 0),
-                                ),
-                              ),
+                              onPressed: _comprando ? null : _abrirCompraDireta,
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: Color(0xFF1A237E)),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8)),
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
-                              child: const Text(
-                                'Comprar',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF1A237E),
-                                ),
-                              ),
+                              child: _comprando
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Comprar',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1A237E),
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const BalcaoScreen(abaInicial: 1),
-                                ),
-                              ),
+                              onPressed: null,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1A237E),
+                                disabledBackgroundColor: const Color(0xFFCBD2E8),
+                                disabledForegroundColor: const Color(0xFF47536D),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8)),
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 elevation: 0,
                               ),
                               child: const Text(
-                                'Vender',
+                                'Venda em breve',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.white,
                                 ),
                               ),
                             ),

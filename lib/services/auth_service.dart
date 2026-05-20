@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import '../models/wallet_transaction.dart';
 import '../models/user_profile.dart';
 
 class AuthService {
@@ -12,6 +14,33 @@ class AuthService {
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'southamerica-east1',
+  );
+
+  Map<String, dynamic> _buildDefaultUserProfilePayload(
+    User user, {
+    double saldo = 0,
+  }) {
+    final fallbackName = user.displayName?.trim() ?? '';
+    final fallbackEmail = user.email?.trim().toLowerCase() ?? '';
+
+    return <String, dynamic>{
+      'uid': user.uid,
+      'fullName': fallbackName,
+      'email': fallbackEmail,
+      'telefone': '',
+      'cpf': '',
+      'saldo': saldo,
+      'role': 'user',
+      'isAdmin': false,
+      'mfaHabilitado': false,
+      'userActive': true,
+      'userloggedIn': true,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
 
   /// Login padrão
   Future<UserCredential> login({
@@ -207,6 +236,26 @@ class AuthService {
     return getUserProfile(user.uid);
   }
 
+  Stream<UserProfile?> streamCurrentUserProfile() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return Stream.value(null);
+    }
+
+    return _firestore
+        .collection('usuarios')
+        .doc(user.uid)
+        .snapshots()
+        .map((snapshot) {
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        return null;
+      }
+
+      return UserProfile.fromMap(user.uid, data);
+    });
+  }
+
   Future<void> updateCurrentUserMfaStatus(bool enabled) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -222,6 +271,122 @@ class AuthService {
     }, SetOptions(merge: true));
   }
 
+  Future<void> creditCurrentUserSaldo(double valor) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Usuario nao autenticado.',
+      );
+    }
+
+    if (valor <= 0) {
+      throw ArgumentError.value(valor, 'valor', 'O valor deve ser maior que zero.');
+    }
+
+    try {
+      final callable = _functions.httpsCallable('creditarSaldoSimulado');
+      await callable.call(<String, dynamic>{
+        'valor': valor,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      debugPrint(
+        '[AuthService] creditCurrentUserSaldo function error: '
+        'code=${error.code}, message=${error.message}',
+      );
+
+      if (error.code == 'not-found' ||
+          error.code == 'unimplemented' ||
+          error.code == 'internal') {
+        throw Exception(
+          'A funcao de credito ainda nao esta disponivel no Firebase. '
+          'Publique as Cloud Functions e tente novamente.',
+        );
+      }
+
+      throw Exception(error.message ?? 'Nao foi possivel creditar o saldo.');
+    }
+  }
+
+  Future<void> comprarTokensStartup({
+    required String startupUid,
+    required int quantidade,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Usuario nao autenticado.',
+      );
+    }
+
+    if (startupUid.trim().isEmpty) {
+      throw ArgumentError.value(startupUid, 'startupUid', 'Startup invalida.');
+    }
+
+    if (quantidade <= 0) {
+      throw ArgumentError.value(
+        quantidade,
+        'quantidade',
+        'A quantidade deve ser maior que zero.',
+      );
+    }
+
+    try {
+      final callable = _functions.httpsCallable('comprarTokensStartup');
+      await callable.call(<String, dynamic>{
+        'startupUid': startupUid,
+        'quantidade': quantidade,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      debugPrint(
+        '[AuthService] comprarTokensStartup function error: '
+        'code=${error.code}, message=${error.message}',
+      );
+      throw Exception(error.message ?? 'Nao foi possivel concluir a compra.');
+    }
+  }
+
+  Stream<List<WalletTransaction>> streamCurrentUserTransactions() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return Stream.value(const []);
+    }
+
+    return _firestore
+        .collection('usuarios')
+        .doc(user.uid)
+        .collection('transacoes')
+        .snapshots()
+        .map((snapshot) {
+      final transacoes = snapshot.docs
+          .map((doc) => WalletTransaction.fromFirestore(doc.id, doc.data()))
+          .toList();
+
+      transacoes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return transacoes;
+    });
+  }
+
+  Future<List<WalletTransaction>> getCurrentUserTransactions() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const [];
+    }
+
+    final snapshot = await _firestore
+        .collection('usuarios')
+        .doc(user.uid)
+        .collection('transacoes')
+        .get();
+
+    final transacoes = snapshot.docs
+        .map((doc) => WalletTransaction.fromFirestore(doc.id, doc.data()))
+        .toList();
+
+    transacoes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return transacoes;
+  }
   Future<UserProfile> ensureCurrentUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -236,22 +401,7 @@ class AuthService {
       return existingProfile;
     }
 
-    final fallbackName = user.displayName?.trim() ?? '';
-    final fallbackEmail = user.email?.trim().toLowerCase() ?? '';
-
-    final payload = <String, dynamic>{
-      'uid': user.uid,
-      'fullName': fallbackName,
-      'email': fallbackEmail,
-      'telefone': '',
-      'cpf': '',
-      'saldo': 0,
-      'mfaHabilitado': false,
-      'userActive': true,
-      'userloggedIn': true,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
+    final payload = _buildDefaultUserProfilePayload(user);
 
     await _firestore.collection('usuarios').doc(user.uid).set(payload);
 

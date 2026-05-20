@@ -192,6 +192,13 @@ export async function enviarCodigoMfaPorEmail({
     socket.write(`${escapeSmtpData(emailRaw)}\r\n.\r\n`);
     await expectResponse(socket, 250);
     await sendCommand(socket, "QUIT", 221);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "Falha ao enviar e-mail MFA via SMTP.";
+
+    throw new functions.https.HttpsError("internal", message);
   } finally {
     socket.end();
   }
@@ -282,7 +289,7 @@ function sanitizeRequiredString(value: unknown, fieldName: string): string {
 // Normaliza e valida e-mails usados no fluxo MFA.
 function sanitizeEmail(value: unknown): string {
   const email = sanitizeRequiredString(value, "E-mail").toLowerCase();
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailPattern: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   if (!emailPattern.test(email)) {
     throw new functions.https.HttpsError(
@@ -310,51 +317,50 @@ function sanitizePhone(value: unknown): string {
 
 // Carrega e valida as credenciais SMTP configuradas via functions.config().
 function getSmtpConfig(): SmtpConfig {
-  const smtp = getFunctionsConfigSection("smtp");
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const fromEmail = process.env.SMTP_FROM_EMAIL;
 
-  if (!smtp?.host || !smtp?.user || !smtp?.pass || !smtp?.from_email) {
+  if (!host || !user || !pass || !fromEmail) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "As credenciais SMTP nao foram configuradas nas Cloud Functions."
+      "As credenciais SMTP nao foram configuradas (env: SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM_EMAIL)."
     );
   }
 
+  const portRaw = process.env.SMTP_PORT;
+  const secureRaw = process.env.SMTP_SECURE;
+
   return {
-    host: String(smtp.host),
-    port: Number(smtp.port ?? 465),
-    secure: smtp.secure === undefined ? true : String(smtp.secure) === "true",
-    user: String(smtp.user),
-    pass: String(smtp.pass),
-    fromEmail: String(smtp.from_email),
-    fromName: String(smtp.from_name ?? "Mescla Invest"),
+    host,
+    port: portRaw ? Number(portRaw) : 465,
+    secure: secureRaw ? String(secureRaw) === "true" : true,
+    user,
+    pass,
+    fromEmail,
+    fromName: process.env.SMTP_FROM_NAME ?? "Mescla Invest",
   };
 }
 
-// Carrega e valida os dados do provedor de SMS configurados via functions.config().
+// Carrega e valida os dados do provedor de SMS configurados via env.
 function getSmsConfig(): SmsConfig {
-  const sms = getFunctionsConfigSection("sms");
+  const endpoint = process.env.SMS_ENDPOINT;
+  const apiKey = process.env.SMS_API_KEY;
+  const from = process.env.SMS_FROM;
 
-  if (!sms?.endpoint || !sms?.api_key || !sms?.from) {
+  if (!endpoint || !apiKey || !from) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "As credenciais do provedor de SMS nao foram configuradas nas Cloud Functions."
+      "As credenciais do provedor de SMS nao foram configuradas (env: SMS_ENDPOINT, SMS_API_KEY, SMS_FROM)."
     );
   }
 
   return {
-    endpoint: String(sms.endpoint),
-    apiKey: String(sms.api_key),
-    from: String(sms.from),
+    endpoint,
+    apiKey,
+    from,
   };
-}
-
-// Centraliza a leitura de secoes do functions.config() para reduzir repeticao.
-function getFunctionsConfigSection(section: "smtp" | "sms"): Record<string, unknown> {
-  const config = (functions as unknown as {
-    config: () => Record<string, Record<string, unknown> | undefined>;
-  }).config();
-
-  return config[section] ?? {};
 }
 
 // Conecta ao servidor SMTP via TLS (secure) ou TCP simples (insecure), retornando um socket pronto para comandos.

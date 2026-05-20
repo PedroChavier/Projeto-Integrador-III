@@ -1,6 +1,8 @@
 import 'dart:async'; //usado para o timer (contagem regressiva)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; //usado para limitar a entrada so a numeros
+import 'package:cloud_functions/cloud_functions.dart';
+
 import '../home/home_screen.dart';
 
 class Verificacao2FAScreen extends StatefulWidget {
@@ -30,6 +32,7 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
 
   int _segundosRestantes = _tempoInicial;
   Timer? _timer; //timer que vai diminuindo o tempo
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -72,34 +75,71 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
   //verifica se todas as caixas foram preenchidas
   bool get _codigoCompleto => _controllers.every((c) => c.text.isNotEmpty);
 
-  void _confirmar() {
-    if (!_codigoCompleto) return;
+  void _voltarParaPaginaAnterior() {
+    FocusScope.of(context).unfocus();
 
-    //junta todos os numeros digitados
+    if (_isLoading) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _confirmar() async {
+    if (!_codigoCompleto || _isLoading) return;
+
     final codigo = _controllers.map((c) => c.text).join();
-    debugPrint('Codigo 2FA: $codigo');
+    final canal = widget.canal;
 
-    if (codigo != '123456') {
+    setState(() => _isLoading = true);
+
+    try {
+      final functions = FirebaseFunctions.instanceFor(
+        region: 'southamerica-east1',
+      );
+
+      final callable = functions.httpsCallable('verificarCodigoMfaCallable');
+
+      await callable.call(<String, dynamic>{
+        'codigo': codigo,
+        'canal': canal,
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Codigo validado com sucesso!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Codigo invalido. Tente novamente.'),
+          content: Text(e.message ?? 'Codigo invalido. Tente novamente.'),
           backgroundColor: Colors.red[400],
         ),
       );
-      return;
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erro ao validar o codigo. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Codigo validado com sucesso!'),
-        backgroundColor: Colors.green[400],
-      ),
-    );
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-      (route) => false,
-    );
   }
 
   void _reenviar() {
@@ -126,43 +166,45 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
+    return WillPopScope(
+      onWillPop: () async => !_isLoading,
+      child: Scaffold(
+        backgroundColor: Colors.white,
 
       //barra superior com o botao voltar
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
 
         //botao voltar
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.maybePop(context),
-        ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black87),
+            onPressed: _isLoading ? null : _voltarParaPaginaAnterior,
+          ),
 
         //linha colorida
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(2),
-          child: Container(
-            height: 2,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF6C63FF),
-                  Color(0xFFE040FB),
-                  Color(0xFFFF6B6B),
-                ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(2),
+            child: Container(
+              height: 2,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF6C63FF),
+                    Color(0xFFE040FB),
+                    Color(0xFFFF6B6B),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Titulo
               const Text(
                 'Verificacao 2FA',
@@ -287,48 +329,66 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
               const SizedBox(height: 36),
 
               // Botao confirmar
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton(
-                  onPressed: _codigoCompleto ? _confirmar : null,
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: _codigoCompleto ? Colors.black87 : Colors.black26,
-                      width: 1.5,
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton(
+                    onPressed: _codigoCompleto && !_isLoading ? _confirmar : null,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: _codigoCompleto && !_isLoading
+                            ? Colors.black87
+                            : Colors.black26,
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: Text(
-                    'Confirmar e entrar',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: _codigoCompleto ? Colors.black87 : Colors.black38,
-                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.black87,
+                              ),
+                            ),
+                          )
+                        : Text(
+                            'Confirmar e entrar',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: _codigoCompleto
+                                  ? Colors.black87
+                                  : Colors.black38,
+                            ),
+                          ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              // Reenviar codigo
-              Center(
-                child: GestureDetector(
-                  onTap: _reenviar,
-                  child: const Text(
-                    'Reenviar Codigo',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF6C63FF),
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
+                // Reenviar codigo
+                Center(
+                  child: GestureDetector(
+                    onTap: _isLoading ? null : _reenviar,
+                    child: Text(
+                      'Reenviar Codigo',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _isLoading
+                            ? Colors.black26
+                            : const Color(0xFF6C63FF),
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

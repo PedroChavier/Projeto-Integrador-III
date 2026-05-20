@@ -5,10 +5,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../models/usuario.dart';
 
 class RegistrationService {
-  // RegistrationService({AuthService? authService, FirebaseFirestore? firestore})
-  //   : _authService = authService ?? AuthService(),
-  //     _firestore = firestore ?? FirebaseFirestore.instance;
-
 
   final FirebaseAuth _authService = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -19,7 +15,10 @@ class RegistrationService {
   Future<void> registerUser(Usuario usuario) async {
     final email = usuario.email?.trim().toLowerCase();
     final senha = usuario.senha;
-    final cpf = usuario.cpf?.replaceAll(RegExp(r'[^0-9]'), '');
+    final cpf = usuario.cpf
+        ?.trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^0-9X]'), '');
     final nome = usuario.fullName?.trim();
     final telefone = usuario.telefone?.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -37,7 +36,9 @@ class RegistrationService {
       );
     }
 
-    if (cpf == null || cpf.length != 11) {
+    if (cpf == null ||
+        cpf.length != 11 ||
+        !RegExp(r'^\d{10}[\dX]$').hasMatch(cpf)) {
       throw FirebaseAuthException(
         code: 'invalid-cpf',
         message: 'CPF invalido.',
@@ -72,6 +73,8 @@ class RegistrationService {
         ..['cpf'] = cpf
         ..['email'] = email
         ..['telefone'] = telefone
+        ..['role'] = 'user'
+        ..['isAdmin'] = false
         ..['dataNascimento'] = usuario.dataNascimento == null
             ? null
             : Timestamp.fromDate(usuario.dataNascimento!.toUtc())

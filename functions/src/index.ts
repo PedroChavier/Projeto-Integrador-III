@@ -62,6 +62,15 @@ type VerificarCodigoMfaPayload = {
   canal?: unknown;
 };
 
+type CreditarSaldoPayload = {
+  valor?: unknown;
+};
+
+type ComprarTokensStartupPayload = {
+  startupUid?: unknown;
+  quantidade?: unknown;
+};
+
 // Função Callable: registra um usuário (valida autenticação, sanitiza payload, evita CPF duplicado e salva/merge no Firestore).
 export const registrarUsuario = functions
   .region('southamerica-east1')
@@ -356,6 +365,198 @@ export const verificarCodigoMfaCallable = functions
     };
   }
 );
+
+// Funcao Callable: credita saldo simulado com privilegios de Admin SDK para evitar bloqueios das regras do cliente.
+export const creditarSaldoSimulado = functions
+  .region("southamerica-east1")
+  .https.onCall(async (data: CreditarSaldoPayload, context) => {
+    const uid = context.auth?.uid;
+
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Usuario nao autenticado."
+      );
+    }
+
+    const valor = sanitizePositiveNumber(data.valor, "Valor");
+    const usuarioRef = usuariosCollection.doc(uid);
+    const transacaoRef = usuarioRef.collection("transacoes").doc();
+    const usuarioSnapshot = await usuarioRef.get();
+
+    const batch = db.batch();
+
+    if (usuarioSnapshot.exists) {
+      batch.set(
+        usuarioRef,
+        {
+          saldo: admin.firestore.FieldValue.increment(valor),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } else {
+      const authUser = await admin.auth().getUser(uid);
+
+      batch.set(usuarioRef, {
+        uid,
+        fullName: authUser.displayName?.trim() ?? "",
+        email: authUser.email?.trim().toLowerCase() ?? "",
+        telefone: authUser.phoneNumber?.replace(/\D/g, "") ?? "",
+        cpf: "",
+        saldo: valor,
+        role: "user",
+        isAdmin: false,
+        mfaHabilitado: false,
+        userActive: true,
+        userloggedIn: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    batch.set(transacaoRef, {
+      tipo: "deposito",
+      titulo: "Credito Simulado",
+      subtitulo: formatTransactionDate(new Date()),
+      valor,
+      positivo: true,
+      fonte: "Externo",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    return {
+      success: true,
+      valor,
+    };
+  });
+
+export const comprarTokensStartup = functions
+  .region("southamerica-east1")
+  .https.onCall(async (data: ComprarTokensStartupPayload, context) => {
+    const uid = context.auth?.uid;
+
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Usuario nao autenticado."
+      );
+    }
+
+    const startupUid = sanitizeRequiredString(data.startupUid, "Startup");
+    const quantidade = sanitizePositiveInteger(data.quantidade, "Quantidade");
+    const startupRef = db.collection("startups").doc(startupUid);
+    const usuarioRef = usuariosCollection.doc(uid);
+    const transacaoRef = usuarioRef.collection("transacoes").doc();
+
+    const [startupSnapshot, usuarioSnapshot] = await Promise.all([
+      startupRef.get(),
+      usuarioRef.get(),
+    ]);
+
+    if (!startupSnapshot.exists) {
+      throw new functions.https.HttpsError(
+        "not-found",
+        "Startup nao encontrada."
+      );
+    }
+
+    const startupData = startupSnapshot.data() as Record<string, unknown>;
+    const precoToken = pickPrecoFromData(
+      startupData,
+      toNumber(startupData.cptAportado ?? startupData.capitalAportado ?? startupData.cpt) ?? 0,
+      toNumber(startupData.totalTokensEmitidos ?? startupData.totalTokens ?? startupData.tokensEmitidos) ?? 0
+    );
+
+    if (!Number.isFinite(precoToken) || precoToken <= 0) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "A startup nao possui preco de token disponivel."
+      );
+    }
+
+    const usuarioData = (usuarioSnapshot.data() ?? {}) as Record<string, unknown>;
+    const saldoAtual = toNumber(usuarioData.saldo) ?? 0;
+    const valorTotal = Number((precoToken * quantidade).toFixed(2));
+
+    if (saldoAtual < valorTotal) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Saldo insuficiente para concluir a compra."
+      );
+    }
+
+    const portfolio = toRecord(usuarioData.portfolio);
+    const holdingAtual = toRecord(portfolio[startupUid]);
+    const quantidadeAtual = toNumber(holdingAtual.quantidade) ?? 0;
+    const valorInvestidoAtual = toNumber(holdingAtual.valorInvestido) ?? 0;
+    const novaQuantidade = quantidadeAtual + quantidade;
+    const novoValorInvestido = Number((valorInvestidoAtual + valorTotal).toFixed(2));
+    const precoMedio = novaQuantidade > 0
+      ? Number((novoValorInvestido / novaQuantidade).toFixed(2))
+      : 0;
+
+    const startupNome =
+      typeof startupData.nome === "string" ? startupData.nome.trim() : startupUid;
+    const startupSetor =
+      typeof startupData.setor === "string" ? startupData.setor.trim() : "";
+
+    const batch = db.batch();
+
+    batch.set(
+      usuarioRef,
+      {
+        saldo: admin.firestore.FieldValue.increment(-valorTotal),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        portfolio: {
+          [startupUid]: {
+            startupUid,
+            startupNome,
+            startupSetor,
+            quantidade: novaQuantidade,
+            precoMedio,
+            valorInvestido: novoValorInvestido,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+      },
+      { merge: true }
+    );
+
+    batch.set(
+      transacaoRef,
+      {
+        tipo: "compra_token",
+        titulo: `Compra de ${startupNome}`,
+        subtitulo: `${quantidade} token(s) a ${formatPrecoBRL(precoToken)}`,
+        valor: valorTotal,
+        positivo: false,
+        fonte: "Mercado",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    batch.set(
+      startupRef,
+      {
+        cptAportado: admin.firestore.FieldValue.increment(valorTotal),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    await batch.commit();
+
+    return {
+      success: true,
+      startupUid,
+      quantidade,
+      valorTotal,
+    };
+  });
 
 // Tipo usado para retornar itens do catálogo de startups (nomes, descrição, valores formatados etc.).
 type StartupCatalogItem = {
@@ -731,6 +932,64 @@ function sanitizeMfaChannel(value: unknown): MfaChannel {
   }
 
   return value;
+}
+
+function sanitizePositiveNumber(value: unknown, fieldName: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      `${fieldName} invalido.`
+    );
+  }
+
+  return value;
+}
+
+function sanitizePositiveInteger(value: unknown, fieldName: string): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      `${fieldName} invalida.`
+    );
+  }
+
+  return value;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function formatTransactionDate(data: Date): string {
+  const meses = [
+    "",
+    "jan",
+    "fev",
+    "mar",
+    "abr",
+    "mai",
+    "jun",
+    "jul",
+    "ago",
+    "set",
+    "out",
+    "nov",
+    "dez",
+  ];
+
+  const hora = data.getHours().toString().padStart(2, "0");
+  const minuto = data.getMinutes().toString().padStart(2, "0");
+
+  return `${data.getDate()} ${meses[data.getMonth() + 1]} ${data.getFullYear()} - ${hora}:${minuto}`;
 }
 
 // Cria um ID determinístico para o documento de recuperação de senha, derivado do e-mail (hash).

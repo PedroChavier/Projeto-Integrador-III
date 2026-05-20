@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
@@ -27,23 +28,39 @@ class _SmsEmailVerificationScreenState
   bool _isLoading = false;
 
   bool get _temEmail => widget.profile.email.trim().isNotEmpty;
-  bool get _temTelefone => _somenteDigitos(widget.profile.telefone).length >= 10;
+  bool get _temTelefone =>
+      _somenteDigitos(widget.profile.telefone).length >= 10;
 
   Future<void> _enviarCodigo() async {
     final metodo = _metodoSelecionado;
 
     if (metodo == null) {
-      _mostrarMensagem('Selecione como deseja receber o codigo.', isError: true);
+      _mostrarMensagem(
+        'Selecione como deseja receber o codigo.',
+        isError: true,
+      );
       return;
     }
+
+    final canal = metodo == _MetodoMfa.email ? 'email' : 'sms';
+    final destino = metodo == _MetodoMfa.email
+        ? _mascararEmail(widget.profile.email)
+        : _mascararTelefone(widget.profile.telefone);
 
     setState(() => _isLoading = true);
 
     try {
-      final canal = metodo == _MetodoMfa.email ? 'e-mail' : 'SMS';
-      final destino = metodo == _MetodoMfa.email
-          ? _mascararEmail(widget.profile.email)
-          : _mascararTelefone(widget.profile.telefone);
+      if (!mounted) return;
+
+      final functions = FirebaseFunctions.instanceFor(
+        region: 'southamerica-east1',
+      );
+
+      final callable = functions.httpsCallable('solicitarCodigoMfa');
+
+      await callable.call(<String, dynamic>{
+        'canal': canal,
+      });
 
       if (!mounted) return;
 
@@ -56,6 +73,18 @@ class _SmsEmailVerificationScreenState
             destinoMascarado: destino,
           ),
         ),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      _mostrarMensagem(
+        'Falha ao enviar o codigo: ${e.code} - ${e.message ?? 'sem mensagem'}.',
+        isError: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarMensagem(
+        'Erro ao enviar o codigo: ${e.toString()}',
+        isError: true,
       );
     } finally {
       if (mounted) {
@@ -243,7 +272,8 @@ class _SmsEmailVerificationScreenState
                   habilitado: _temTelefone,
                   onTap: _isLoading || !_temTelefone
                       ? null
-                      : () => setState(() => _metodoSelecionado = _MetodoMfa.sms),
+                      : () =>
+                          setState(() => _metodoSelecionado = _MetodoMfa.sms),
                 ),
                 const SizedBox(height: 40),
                 SizedBox(
@@ -380,9 +410,7 @@ class _OpcaoCanalCard extends StatelessWidget {
                   ? Icons.radio_button_checked
                   : Icons.radio_button_off_outlined,
               color: habilitado
-                  ? (selecionado
-                      ? const Color(0xFF6C63FF)
-                      : Colors.black26)
+                  ? (selecionado ? const Color(0xFF6C63FF) : Colors.black26)
                   : Colors.black26,
             ),
           ],

@@ -1,22 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../home/home_screen.dart';
-import '../wallet/deposit_success_screen.dart'; // importa a tela de confirmação
 
-// ─────────────────────────────────────────────
-// TELA: Adicionar Saldo
-// ─────────────────────────────────────────────
+import '../../services/auth_service.dart';
+import '../home/home_screen.dart';
+import 'deposit_success_screen.dart';
+
 class AdicionarSaldoScreen extends StatefulWidget {
   final double saldoAtual;
-  const AdicionarSaldoScreen({super.key, this.saldoAtual = 2000.00});
+  final Widget telaRetorno;
+
+  const AdicionarSaldoScreen({
+    super.key,
+    this.saldoAtual = 2000.00,
+    required this.telaRetorno,
+  });
 
   @override
   State<AdicionarSaldoScreen> createState() => _AdicionarSaldoScreenState();
 }
 
 class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
-  final _valorController = TextEditingController();
+  final AuthService _authService = AuthService();
+  final TextEditingController _valorController = TextEditingController();
   double _valorDigitado = 0.0;
+  bool _salvando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _valorController.value = TextEditingValue(
+      text: _CurrencyInputFormatter.formatFromDigits(''),
+      selection: TextSelection.collapsed(
+        offset: _CurrencyInputFormatter.formatFromDigits('').length,
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -30,18 +48,50 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
     return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
-  void _confirmar() {
-    if (_valorDigitado <= 0) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SaldoConfirmadoScreen(
-          valorCreditado: _valorDigitado,
-          saldoAnterior: widget.saldoAtual,
-          novoSaldo: _novoSaldo,
+  double _parseValorFormatado(String valorFormatado) {
+    final digits = valorFormatado.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return 0.0;
+    return int.parse(digits) / 100;
+  }
+
+  Future<void> _confirmar() async {
+    if (_valorDigitado <= 0 || _salvando) return;
+
+    setState(() {
+      _salvando = true;
+    });
+
+    try {
+      await _authService.creditCurrentUserSaldo(_valorDigitado);
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SaldoConfirmadoScreen(
+            valorCreditado: _valorDigitado,
+            saldoAnterior: widget.saldoAtual,
+            novoSaldo: _novoSaldo,
+            telaRetorno: widget.telaRetorno,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível salvar o saldo: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _salvando = false;
+        });
+      }
+    }
   }
 
   @override
@@ -50,7 +100,6 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
       backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: Column(
         children: [
-          // Gradiente + seta
           Container(
             color: const Color.fromARGB(255, 255, 255, 255),
             child: SafeArea(
@@ -72,8 +121,11 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: Colors.black87, size: 22),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.black87,
+                      size: 22,
+                    ),
                     onPressed: () => Navigator.maybePop(context),
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                     constraints: const BoxConstraints(),
@@ -82,15 +134,12 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
               ),
             ),
           ),
-
-          // Conteúdo
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título
                   const Text(
                     'Adicionar Saldo',
                     style: TextStyle(
@@ -100,8 +149,6 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Saldo Atual
                   const Text(
                     'Saldo Atual',
                     style: TextStyle(fontSize: 13, color: Colors.black45),
@@ -116,8 +163,6 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Campo valor
                   const Text(
                     'Digite o valor',
                     style: TextStyle(fontSize: 13, color: Colors.black45),
@@ -125,50 +170,49 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _valorController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                    keyboardType: TextInputType.number,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}')),
+                      _CurrencyInputFormatter(),
                     ],
                     style: const TextStyle(fontSize: 16, color: Colors.black87),
-                    onChanged: (v) {
+                    onChanged: (value) {
                       setState(() {
-                        _valorDigitado = double.tryParse(v) ?? 0.0;
+                        _valorDigitado = _parseValorFormatado(value);
                       });
                     },
                     decoration: InputDecoration(
                       hintText: 'R\$ 0,00',
-                      hintStyle:
-                          const TextStyle(color: Colors.black38, fontSize: 16),
+                      hintStyle: const TextStyle(
+                        color: Colors.black38,
+                        fontSize: 16,
+                      ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFDDDDDD)),
+                        borderSide: const BorderSide(color: Color(0xFFDDDDDD)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFDDDDDD)),
+                        borderSide: const BorderSide(color: Color(0xFFDDDDDD)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: const BorderSide(
-                            color: Color(0xFF6C63FF), width: 1.5),
+                          color: Color(0xFF6C63FF),
+                          width: 1.5,
+                        ),
                       ),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 28),
-
-                  // Resumo
                   _LinhaResumo(
                     label: 'Saldo Atual',
-                    valor:
-                        'R\$ ${widget.saldoAtual.toStringAsFixed(0).replaceAll('.', ',')}00',
+                    valor: _formatReal(widget.saldoAtual),
                     valorColor: Colors.black87,
                     bold: false,
                   ),
@@ -176,7 +220,7 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
                   _LinhaResumo(
                     label: 'Valor a adicionar',
                     valor: _valorDigitado > 0
-                        ? '+ R\$ ${_valorDigitado.toStringAsFixed(0).replaceAll('.', ',')}00'
+                        ? '+ ${_formatReal(_valorDigitado)}'
                         : '+ R\$ 0,00',
                     valorColor: const Color(0xFF6C63FF),
                     bold: false,
@@ -192,28 +236,39 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
                     bold: true,
                   ),
                   const SizedBox(height: 40),
-
-                  // Botão confirmar
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: OutlinedButton(
-                      onPressed: _confirmar,
+                      onPressed: _salvando ? null : _confirmar,
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(
-                            color: Colors.black87, width: 1.5),
+                          color: Colors.black87,
+                          width: 1.5,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text(
-                        'Confirmar crédito simulado',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      child: _salvando
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.black87,
+                                ),
+                              ),
+                            )
+                          : const Text(
+                              'Confirmar crédito simulado',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -227,7 +282,6 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
   }
 }
 
-// ── Widget compartilhado: Linha de resumo ─────────────────────
 class _LinhaResumo extends StatelessWidget {
   final String label;
   final String valor;
@@ -264,5 +318,47 @@ class _LinhaResumo extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _CurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final formatted = formatFromDigits(digits);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  static String formatFromDigits(String digits) {
+    final onlyDigits = digits.replaceAll(RegExp(r'[^0-9]'), '');
+    final padded = (onlyDigits.isEmpty ? '0' : onlyDigits).padLeft(3, '0');
+    final cents = padded.substring(padded.length - 2);
+    final integerPart = padded.substring(0, padded.length - 2);
+    final reais = _addThousandsSeparator(integerPart);
+
+    return 'R\$ $reais,$cents';
+  }
+
+  static String _addThousandsSeparator(String digits) {
+    final trimmed = digits.replaceFirst(RegExp(r'^0+(?=\d)'), '');
+    final normalized = trimmed.isEmpty ? '0' : trimmed;
+    final buffer = StringBuffer();
+
+    for (var i = 0; i < normalized.length; i++) {
+      final reverseIndex = normalized.length - i;
+      buffer.write(normalized[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+        buffer.write('.');
+      }
+    }
+
+    return buffer.toString();
   }
 }

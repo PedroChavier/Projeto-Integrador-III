@@ -48,9 +48,13 @@ class Pessoa {
   bool validarCpf() {
     if (_cpf == null || _cpf!.trim().isEmpty) return false;
 
-    final cpfNumeros = _cpf!.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cpfNumeros.length != 11) return false;
-    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpfNumeros)) return false;
+    final cpfNormalizado = _cpf!
+        .trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^0-9X]'), '');
+    if (cpfNormalizado.length != 11) return false;
+    if (!RegExp(r'^\d{10}[\dX]$').hasMatch(cpfNormalizado)) return false;
+    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpfNormalizado)) return false;
 
     return true;
   }

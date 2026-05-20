@@ -56,3 +56,4 @@ temp/
 lib/credential.json
 functions/.runtimeconfig.json
 /package.json
+test/local_login_test.dart

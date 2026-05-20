@@ -8,12 +8,14 @@ class SaldoConfirmadoScreen extends StatefulWidget {
   final double valorCreditado;
   final double saldoAnterior;
   final double novoSaldo;
+  final Widget telaRetorno;
 
   const SaldoConfirmadoScreen({
     super.key,
     required this.valorCreditado,
     required this.saldoAnterior,
     required this.novoSaldo,
+    required this.telaRetorno,
   });
 
   @override
@@ -207,7 +209,13 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                         height: 50,
                         child: OutlinedButton(
                           onPressed: () {
-                            Navigator.popUntil(context, (route) => route.isFirst);
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => widget.telaRetorno,
+                              ),
+                              (route) => false,
+                            );
                           },
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: Colors.black87, width: 1.5),

@@ -70,12 +70,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
         profile = await _authService.ensureCurrentUserProfile();
 
-        if (profile == null) {
-          await _authService.signOut();
-          _mostrarErro('Não foi possivel carregar os dados da conta.');
-          return;
-        }
-
         if (!profile.userActive) {
           await _authService.signOut();
           _mostrarErro(
@@ -100,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
           }
 
           final displayName =
-              _authService.formatDisplayName(profile?.fullName);
+              _authService.formatDisplayName(profile.fullName);
           final saudacao = displayName != null
               ? 'Bem-vindo, $displayName${profile.isAdmin ? ' (admin)' : ''}!'
               : 'Bem-vindo, ${userCredential.user?.email}!';

@@ -28,6 +28,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
   final _telefoneController = TextEditingController();
   final _senhaController = TextEditingController();
   final _confirmarSenhaController = TextEditingController();
+  final _senhaFocusNode = FocusNode();
   final RegistrationService _registrationService = RegistrationService();
   final AuthService _authService = AuthService();
 
@@ -44,6 +45,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     _dataNascimentoController.addListener(_atualizarEstadoCampos);
     _senhaController.addListener(_atualizarEstadoSenhas);
     _confirmarSenhaController.addListener(_atualizarEstadoSenhas);
+    _senhaFocusNode.addListener(_atualizarEstadoCampos);
   }
 
   @override
@@ -55,6 +57,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     _telefoneController.dispose();
     _senhaController.dispose();
     _confirmarSenhaController.dispose();
+    _senhaFocusNode.dispose();
     super.dispose();
   }
 
@@ -79,7 +82,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
 
     final nome = _nomeController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
-    final cpf = _somenteDigitos(_cpfController.text);
+    final cpf = _normalizarCpf(_cpfController.text);
     final telefone = _somenteDigitos(_telefoneController.text);
     final senha = _senhaController.text;
     final confirmarSenha = _confirmarSenhaController.text;
@@ -107,7 +110,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     }
 
     if (cpf.length != 11) {
-      _mostrarMensagem('Informe um CPF com 11 digitos.', isError: true);
+      _mostrarMensagem('Informe um CPF com 11 caracteres.', isError: true);
       return;
     }
 
@@ -255,10 +258,15 @@ class _CadastroScreenState extends State<CadastroScreen> {
   }
 
   bool _isValidCpf(String value) {
-    final cpf = _somenteDigitos(value);
+    final cpf = _normalizarCpf(value);
 
     if (cpf.length != 11) return false;
+    if (!RegExp(r'^\d{10}[\dX]$').hasMatch(cpf)) return false;
     if (RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;
+
+    if (cpf.endsWith('X')) {
+      return true;
+    }
 
     int calcularDigito(int length) {
       var soma = 0;
@@ -279,6 +287,12 @@ class _CadastroScreenState extends State<CadastroScreen> {
 
   String _somenteDigitos(String value) {
     return value.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  String _normalizarCpf(String value) {
+    return value
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^0-9X]'), '');
   }
 
   DateTime? _parseDataNascimento(String value) {
@@ -318,6 +332,9 @@ class _CadastroScreenState extends State<CadastroScreen> {
   }
 
   bool get _senhaFoiPreenchida => _senhaController.text.isNotEmpty;
+  bool get _senhaEstaEmFoco => _senhaFocusNode.hasFocus;
+  bool get _mostrarRequisitosSenha =>
+      _senhaFoiPreenchida || _senhaEstaEmFoco;
   bool get _senhaTemMaiuscula =>
       _senhaUppercaseRegex.hasMatch(_senhaController.text);
   bool get _senhaTemMinuscula =>
@@ -550,15 +567,15 @@ class _CadastroScreenState extends State<CadastroScreen> {
               _label('CPF*'),
               TextField(
                 controller: _cpfController,
-                keyboardType: TextInputType.number,
+                keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.characters,
                 enabled: !_isLoading,
                 inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
                   _CpfInputFormatter(),
                 ],
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
                 decoration: _inputDecoration(
-                  hint: '000.000.000-00',
+                  hint: '000.000.000-0X',
                   enabledBorderColor: _corBordaCpf,
                   focusedBorderColor: _corBordaCpf,
                 ),
@@ -597,6 +614,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
               _label('Senha*'),
               TextField(
                 controller: _senhaController,
+                focusNode: _senhaFocusNode,
                 obscureText: _obscureSenha,
                 enabled: !_isLoading,
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
@@ -618,59 +636,61 @@ class _CadastroScreenState extends State<CadastroScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF7F8FA),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _senhaFoiPreenchida && !_senhaAtendePolitica
-                        ? Colors.red.shade200
-                        : const Color(0xFFE6E8EC),
+              if (_mostrarRequisitosSenha) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F8FA),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _senhaFoiPreenchida && !_senhaAtendePolitica
+                          ? Colors.red.shade200
+                          : const Color(0xFFE6E8EC),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Requisitos da senha',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _itemRegraSenha(
+                        atendida: _senhaTemMaiuscula,
+                        texto: 'Exigir caractere maiusculo',
+                      ),
+                      const SizedBox(height: 8),
+                      _itemRegraSenha(
+                        atendida: _senhaTemMinuscula,
+                        texto: 'Exigir caractere minusculo',
+                      ),
+                      const SizedBox(height: 8),
+                      _itemRegraSenha(
+                        atendida: _senhaTemEspecial,
+                        texto: 'Exigir caractere especial',
+                      ),
+                      const SizedBox(height: 8),
+                      _itemRegraSenha(
+                        atendida: _senhaTemNumero,
+                        texto: 'Exigir caractere numerico',
+                      ),
+                      const SizedBox(height: 8),
+                      _itemRegraSenha(
+                        atendida: _senhaTemTamanhoValido,
+                        texto:
+                            'Tamanho entre $_senhaMinLength e $_senhaMaxLength caracteres',
+                      ),
+                    ],
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Requisitos da senha',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _itemRegraSenha(
-                      atendida: _senhaTemMaiuscula,
-                      texto: 'Exigir caractere maiusculo',
-                    ),
-                    const SizedBox(height: 8),
-                    _itemRegraSenha(
-                      atendida: _senhaTemMinuscula,
-                      texto: 'Exigir caractere minusculo',
-                    ),
-                    const SizedBox(height: 8),
-                    _itemRegraSenha(
-                      atendida: _senhaTemEspecial,
-                      texto: 'Exigir caractere especial',
-                    ),
-                    const SizedBox(height: 8),
-                    _itemRegraSenha(
-                      atendida: _senhaTemNumero,
-                      texto: 'Exigir caractere numerico',
-                    ),
-                    const SizedBox(height: 8),
-                    _itemRegraSenha(
-                      atendida: _senhaTemTamanhoValido,
-                      texto:
-                          'Tamanho entre $_senhaMinLength e $_senhaMaxLength caracteres',
-                    ),
-                  ],
-                ),
-              ),
+              ],
               const SizedBox(height: 20),
               _label('Confirme sua senha*'),
               TextField(
@@ -759,13 +779,24 @@ class _CpfInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final rawValue = newValue.text.toUpperCase();
     final buffer = StringBuffer();
-    for (int i = 0; i < digits.length && i < 11; i++) {
-      if (i == 3 || i == 6) buffer.write('.');
-      if (i == 9) buffer.write('-');
-      buffer.write(digits[i]);
+    var count = 0;
+
+    for (final char in rawValue.characters) {
+      if (count >= 11) break;
+
+      final isDigit = RegExp(r'\d').hasMatch(char);
+      final isFinalX = char == 'X' && count == 10;
+
+      if (!isDigit && !isFinalX) continue;
+
+      if (count == 3 || count == 6) buffer.write('.');
+      if (count == 9) buffer.write('-');
+      buffer.write(char);
+      count++;
     }
+
     final str = buffer.toString();
     return newValue.copyWith(
       text: str,
