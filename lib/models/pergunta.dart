@@ -1,63 +1,52 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Pergunta {
-  String? _idAutor;
-  String? _idStartupDestino;
-  String? _textoPergunta;
-  String? _textoResposta;
-  bool _isPrivada = false;
-  DateTime? _dataEnvio;
+  final String id;
+  final String idAutor;
+  final String nomeAutor;
+  final String iniciaisAutor;
+  final String idStartup;
+  final String nomeStartup;
+  final String textoPergunta;
+  final String textoResposta;
+  final DateTime dataEnvio;
 
   Pergunta({
-    String? idAutor,
-    String? idStartupDestino,
-    String? textoPergunta,
-    bool isPrivada = false,
-  }) : _idAutor = idAutor,
-       _idStartupDestino = idStartupDestino,
-       _textoPergunta = textoPergunta,
-       _isPrivada = isPrivada,
-       _dataEnvio = DateTime.now();
+    required this.id,
+    required this.idAutor,
+    required this.nomeAutor,
+    required this.iniciaisAutor,
+    required this.idStartup,
+    required this.nomeStartup,
+    required this.textoPergunta,
+    this.textoResposta = '',
+    required this.dataEnvio,
+  });
 
-  // Getters
-  String? get idAutor => _idAutor;
-  String? get idStartupDestino => _idStartupDestino;
-  String? get textoPergunta => _textoPergunta;
-  String? get textoResposta => _textoResposta;
-  bool get isPrivada => _isPrivada;
-  DateTime? get dataEnvio => _dataEnvio;
-
-  // Setters
-  set idAutor(String? value) => _idAutor = value;
-  set idStartupDestino(String? value) => _idStartupDestino = value;
-  set textoPergunta(String? value) => _textoPergunta = value;
-  set textoResposta(String? value) => _textoResposta = value;
-  set isPrivada(bool value) => _isPrivada = value;
-  set dataEnvio(DateTime? value) => _dataEnvio = value;
-
-  /// Envia uma pergunta
-  bool enviarPergunta() {
-    if (_idAutor == null ||
-        _idStartupDestino == null ||
-        _textoPergunta == null) {
-      return false;
-    }
-    _dataEnvio = DateTime.now();
-    return true;
+  factory Pergunta.fromFirestore(String id, Map<String, dynamic> data) {
+    return Pergunta(
+      id: id,
+      idAutor: data['idAutor'] as String? ?? '',
+      nomeAutor: data['nomeAutor'] as String? ?? 'Usuário',
+      iniciaisAutor: data['iniciaisAutor'] as String? ?? '?',
+      idStartup: data['idStartup'] as String? ?? '',
+      nomeStartup: data['nomeStartup'] as String? ?? '',
+      textoPergunta: data['textoPergunta'] as String? ?? '',
+      textoResposta: data['textoResposta'] as String? ?? '',
+      dataEnvio: (data['dataEnvio'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
   }
 
-  /// Responde a pergunta
-  bool responderPergunta(String resposta) {
-    if (resposta.isEmpty) return false;
-    _textoResposta = resposta;
-    return true;
-  }
-
-  /// Lista perguntas públicas (simplificado)
-  static List<Pergunta> listarPerguntasPublicas(List<Pergunta> perguntas) {
-    return perguntas.where((p) => !p.isPrivada).toList();
-  }
-
-  /// Lista perguntas privadas (simplificado)
-  static List<Pergunta> listarPerguntasPrivadas(List<Pergunta> perguntas) {
-    return perguntas.where((p) => p.isPrivada).toList();
+  Map<String, dynamic> toMap() {
+    return {
+      'idAutor': idAutor,
+      'nomeAutor': nomeAutor,
+      'iniciaisAutor': iniciaisAutor,
+      'idStartup': idStartup,
+      'nomeStartup': nomeStartup,
+      'textoPergunta': textoPergunta,
+      'textoResposta': textoResposta,
+      'dataEnvio': Timestamp.fromDate(dataEnvio),
+    };
   }
 }

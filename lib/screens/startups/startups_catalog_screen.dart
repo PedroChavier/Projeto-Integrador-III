@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/startup_service.dart';
 import '../home/home_screen.dart';
-import 'startup_detail.dart';
+import 'startup_detail.dart'; 
 
 class StartupsScreen extends StatefulWidget {
   const StartupsScreen({super.key});
