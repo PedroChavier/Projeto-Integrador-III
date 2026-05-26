@@ -5,6 +5,7 @@ import '../../models/user_profile.dart';
 import '../home/home_screen.dart';
 import '../initial/splash_screen.dart';
 import '../authentication/password_recovery_screen.dart';
+import '../authentication/sms_email_verification_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -44,27 +45,109 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Future<void> _alterarMfa(bool value) async {
     if (_salvandoMfa) return;
 
-    setState(() => _salvandoMfa = true);
+    if (value) {
+      await _ativarMfaComVerificacao();
+    } else {
+      await _desativarMfa();
+    }
+  }
+
+  Future<void> _ativarMfaComVerificacao() async {
+    final perfil = _perfil;
+    if (perfil == null) return;
+
+    final telMascarado = _mascararTelefoneDialog(perfil.telefone);
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ativar autenticacao 2FA'),
+        content: Text(
+          'Para ativar, voce precisara confirmar o acesso ao numero $telMascarado ou ao seu e-mail.\n\nDeseja continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true || !mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SmsEmailVerificationScreen(
+          profile: perfil,
+          onMfaAtivado: () async {
+            await _authService.updateCurrentUserMfaStatus(true);
+            await _carregarPerfil();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Autenticacao em dois fatores ativada.'),
+                  backgroundColor: Colors.green[400],
+                ),
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _desativarMfa() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Desativar autenticacao 2FA'),
+        content: const Text(
+          'Ao desativar, seu login nao exigira mais verificacao por codigo. Deseja continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Desativar',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true || !mounted) return;
+
+    final estadoAnterior = _2faAtivado;
+    setState(() {
+      _salvandoMfa = true;
+      _2faAtivado = false;
+    });
 
     try {
-      await _authService.updateCurrentUserMfaStatus(value);
+      await _authService.updateCurrentUserMfaStatus(false);
       await _carregarPerfil();
-
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            _2faAtivado
-                ? 'Autenticacao em dois fatores ativada.'
-                : 'Autenticacao em dois fatores desativada.',
-          ),
+          content: const Text('Autenticacao em dois fatores desativada.'),
           backgroundColor: Colors.green[400],
         ),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('[PerfilScreen] Falha ao desativar 2FA: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
-
+      setState(() => _2faAtivado = estadoAnterior);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Nao foi possivel atualizar a autenticacao 2FA.'),
@@ -72,10 +155,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _salvandoMfa = false);
-      }
+      if (mounted) setState(() => _salvandoMfa = false);
     }
+  }
+
+  String _mascararTelefoneDialog(String telefone) {
+    final d = telefone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (d.length < 10) return telefone.isNotEmpty ? telefone : 'cadastrado';
+    final ddd = d.substring(0, 2);
+    final fim = d.substring(d.length - 2);
+    return '($ddd) *****-$fim';
   }
 
   // Gera as iniciais do nome (ex: "Ana Souza" → "AS")

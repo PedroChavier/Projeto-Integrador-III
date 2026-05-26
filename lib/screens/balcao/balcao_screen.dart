@@ -39,6 +39,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   bool _submitting = false;
   bool _dropdownAberto = false;
   bool _loadingStartups = true;
+  String _marketQuickMode = 'balance';
+  bool _showQuickSlider = false;
+  double _quickSliderPct = 50;
 
   List<Startup> _startups = [];
   int _startupSelecionada = 0;
@@ -145,6 +148,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     _qtyController.clear();
     _orderbookState.inputPrice = 0;
     _orderbookState.inputQty = 0;
+    _marketQuickMode = 'balance';
+    _showQuickSlider = false;
+    _quickSliderPct = 50;
   }
 
   void _fillFromBook(double price) {
@@ -846,12 +852,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                           style: TextStyle(fontSize: 9, color: _accent, fontWeight: FontWeight.w600),
                         )
                       else if (order.isPartial)
-                        const Text('parcial', style: TextStyle(fontSize: 9, color: _muted))
-                      else
-                        const Text(
-                          'toque p/ usar',
-                          style: TextStyle(fontSize: 9, color: Color(0xFFBBBBBB)),
-                        ),
+                        const Text('parcial', style: TextStyle(fontSize: 9, color: _muted)
+                      ),
                     ],
                   ),
                 ),
@@ -1068,10 +1070,33 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           ),
           const SizedBox(height: 8),
           // Quick fill
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text('Rápido:', style: TextStyle(fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 8),
+              _buildPercentChip(actionColor, actionSoft, state, isBuy),
+              if (isMarket) ...[
+                _buildQuickModeButton(
+                  'Saldo',
+                  selected: _marketQuickMode == 'balance',
+                  color: actionColor,
+                  onTap: () {
+                    setState(() => _marketQuickMode = 'balance');
+                    _applyQuickFill(_quickSliderPct.round(), state, isBuy);
+                  },
+                ),
+                _buildQuickModeButton(
+                  'Tokens',
+                  selected: _marketQuickMode == 'tokens',
+                  color: actionColor,
+                  onTap: () {
+                    setState(() => _marketQuickMode = 'tokens');
+                    _applyQuickFill(_quickSliderPct.round(), state, isBuy);
+                  },
+                ),
+              ],
               ...[25, 50, 75, 100].map(
                 (pct) => Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -1079,6 +1104,89 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                 ),
               ),
             ],
+          ),
+          if (isMarket) ...[
+            const SizedBox(height: 6),
+            Text(
+              _marketQuickMode == 'balance'
+                  ? (isBuy
+                      ? 'Percentual sobre seu saldo em reais.'
+                      : 'Percentual do saldo em reais convertido pela liquidez do book comprador.')
+                  : (isBuy
+                      ? 'Percentual dos tokens disponíveis no book de venda.'
+                      : 'Percentual dos seus tokens livres para venda.'),
+              style: const TextStyle(fontSize: 10, color: _muted),
+            ),
+          ],
+          const SizedBox(height: 6),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !_showQuickSlider
+                ? const SizedBox(width: double.infinity, height: 0)
+                : Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                    decoration: BoxDecoration(
+                      color: _card,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.tune_rounded, size: 12, color: actionColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Ajuste fino',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: actionColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${_quickSliderPct.round()}%',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: actionColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: actionColor,
+                            inactiveTrackColor: actionSoft,
+                            thumbColor: actionColor,
+                            overlayColor: actionColor.withOpacity(0.12),
+                            trackHeight: 4,
+                            thumbShape: const _GrowingThumbShape(
+                              minRadius: 6,
+                              maxRadius: 14,
+                            ),
+                            showValueIndicator: ShowValueIndicator.never,
+                          ),
+                          child: Slider(
+                            value: _quickSliderPct.clamp(1.0, 100.0),
+                            min: 1,
+                            max: 100,
+                            divisions: 99,
+                            onChanged: (value) {
+                              setState(() => _quickSliderPct = value);
+                              _applyQuickFill(_quickSliderPct.round(), state, isBuy);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
           const SizedBox(height: 8),
           // Contextual balance hint
@@ -1245,21 +1353,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   Widget _buildQuickFillButton(String label, int pct, OrderbookState state, bool isBuy) {
     return GestureDetector(
-      onTap: () {
-        int qty;
-        if (isBuy) {
-          final price = state.orderType == 'market'
-              ? (state.bestAsk?.price ?? state.currentStartup.precoEmissao)
-              : (state.inputPrice > 0 ? state.inputPrice : state.currentStartup.precoEmissao);
-          qty = price > 0 ? ((state.wallet.brl * pct / 100) / price).floor() : 0;
-        } else {
-          qty = (state.wallet.tokens * pct / 100).floor();
-        }
-        if (qty > 0) {
-          _qtyController.text = qty.toString();
-          setState(() => state.inputQty = qty);
-        }
-      },
+      onTap: () => _applyQuickFill(pct, state, isBuy),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
@@ -1270,6 +1364,104 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         child: Text(
           label,
           style: const TextStyle(fontSize: 11, color: _ink, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  void _applyQuickFill(int pct, OrderbookState state, bool isBuy) {
+    int qty;
+    if (state.orderType == 'market') {
+      if (_marketQuickMode == 'balance') {
+        final amount = state.wallet.brl * pct / 100;
+        qty = state.estimateMarketQtyForValue(state.currentTab, amount);
+      } else {
+        final tokenBase = isBuy
+            ? state.availableMarketQty(state.currentTab)
+            : state.wallet.tokens;
+        qty = (tokenBase * pct / 100).floor();
+      }
+    } else if (isBuy) {
+      final price = state.inputPrice > 0
+          ? state.inputPrice
+          : state.currentStartup.precoEmissao;
+      qty = price > 0 ? ((state.wallet.brl * pct / 100) / price).floor() : 0;
+    } else {
+      qty = (state.wallet.tokens * pct / 100).floor();
+    }
+
+    _qtyController.text = qty > 0 ? qty.toString() : '';
+    setState(() {
+      _quickSliderPct = pct.toDouble();
+      state.inputQty = qty;
+    });
+  }
+
+  Widget _buildPercentChip(
+    Color color,
+    Color soft,
+    OrderbookState state,
+    bool isBuy,
+  ) {
+    return GestureDetector(
+      onTap: () => setState(() => _showQuickSlider = !_showQuickSlider),
+      onLongPress: () => _showPercentInputDialog(state, isBuy, color),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: _showQuickSlider ? soft : _card,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: _showQuickSlider ? color.withOpacity(0.4) : _border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 12,
+              color: _showQuickSlider ? color : _muted,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${_quickSliderPct.round()}%',
+              style: TextStyle(
+                fontSize: 11,
+                color: _showQuickSlider ? color : _ink,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickModeButton(
+    String label, {
+    required bool selected,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.12) : _card,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: selected ? color.withOpacity(0.35) : _border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: selected ? color : _ink,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -1612,6 +1804,238 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
 
+  void _showPercentInputDialog(OrderbookState state, bool isBuy, Color actionColor) {
+    String buffer = _quickSliderPct.round().toString();
+    bool replaceOnNext = true;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.45),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final parsed = int.tryParse(buffer) ?? 0;
+            final overLimit = parsed > 100;
+            final displayColor = overLimit ? _sellColor : _ink;
+
+            void press(String key) {
+              setLocal(() {
+                if (key == 'C') {
+                  buffer = '0';
+                  replaceOnNext = true;
+                } else if (key == '<') {
+                  if (buffer.length <= 1) {
+                    buffer = '0';
+                    replaceOnNext = true;
+                  } else {
+                    buffer = buffer.substring(0, buffer.length - 1);
+                  }
+                } else {
+                  if (replaceOnNext || buffer == '0') {
+                    buffer = key;
+                    replaceOnNext = false;
+                  } else if (buffer.length < 3) {
+                    buffer = buffer + key;
+                  }
+                }
+              });
+            }
+
+            void apply() {
+              final raw = int.tryParse(buffer) ?? _quickSliderPct.round();
+              final clamped = raw.clamp(1, 100);
+              setState(() => _quickSliderPct = clamped.toDouble());
+              _applyQuickFill(clamped, state, isBuy);
+              Navigator.pop(ctx);
+            }
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.tune_rounded, size: 16, color: actionColor),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Definir porcentagem',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: const Icon(Icons.close_rounded, size: 20, color: _muted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Valor entre 1 e 100.',
+                      style: TextStyle(fontSize: 11, color: _muted, height: 1.4),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                      decoration: BoxDecoration(
+                        color: _card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: overLimit ? _sellColor.withOpacity(0.6) : _border,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            buffer,
+                            style: TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.w800,
+                              color: displayColor,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '%',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: overLimit ? _sellColor : actionColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (overLimit) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: const [
+                          Icon(Icons.error_outline_rounded, size: 12, color: _sellColor),
+                          SizedBox(width: 4),
+                          Text(
+                            'Máximo é 100% — será limitado',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _sellColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    _buildKeypadRow(const ['1', '2', '3'], press, actionColor),
+                    const SizedBox(height: 8),
+                    _buildKeypadRow(const ['4', '5', '6'], press, actionColor),
+                    const SizedBox(height: 8),
+                    _buildKeypadRow(const ['7', '8', '9'], press, actionColor),
+                    const SizedBox(height: 8),
+                    _buildKeypadRow(const ['C', '0', '<'], press, actionColor),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: parsed <= 0 ? null : apply,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: actionColor,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: actionColor.withOpacity(0.35),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          'Aplicar',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildKeypadRow(
+    List<String> keys,
+    void Function(String key) onPress,
+    Color actionColor,
+  ) {
+    return Row(
+      children: [
+        for (int i = 0; i < keys.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: _buildKeypadKey(keys[i], onPress, actionColor)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildKeypadKey(
+    String label,
+    void Function(String key) onPress,
+    Color actionColor,
+  ) {
+    final isClear = label == 'C';
+    final isBack = label == '<';
+
+    final Color fg = isClear ? _sellColor : (isBack ? _muted : _ink);
+
+    Widget content;
+    if (isBack) {
+      content = const Icon(Icons.backspace_outlined, size: 18, color: _muted);
+    } else {
+      content = Text(
+        label,
+        style: TextStyle(
+          fontSize: isClear ? 16 : 22,
+          fontWeight: FontWeight.w800,
+          color: fg,
+        ),
+      );
+    }
+
+    return Material(
+      color: _card,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        splashColor: actionColor.withOpacity(0.14),
+        highlightColor: actionColor.withOpacity(0.06),
+        onTap: () => onPress(label),
+        child: Container(
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+          ),
+          child: content,
+        ),
+      ),
+    );
+  }
+
   void _showInfoDialog(BuildContext context, String title, String body) {
     showDialog(
       context: context,
@@ -1653,6 +2077,65 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 }
 
 // ── TICKER BADGE ────────────────────────────────────────────────────────────
+
+class _GrowingThumbShape extends SliderComponentShape {
+  final double minRadius;
+  final double maxRadius;
+
+  const _GrowingThumbShape({this.minRadius = 6, this.maxRadius = 14});
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return Size.fromRadius(maxRadius);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    final safeValue = value.isFinite ? value.clamp(0.0, 1.0) : 0.0;
+    final radius = minRadius + (maxRadius - minRadius) * safeValue;
+    final thumbColor = sliderTheme.thumbColor ?? const Color(0xFF173B7A);
+
+    // Soft drop-shadow using two translucent layered discs (web-safe; no MaskFilter)
+    canvas.drawCircle(
+      center.translate(0, 2.0),
+      radius + 1.5,
+      Paint()..color = Colors.black.withOpacity(0.08),
+    );
+    canvas.drawCircle(
+      center.translate(0, 1.2),
+      radius + 0.5,
+      Paint()..color = Colors.black.withOpacity(0.12),
+    );
+
+    // Main thumb
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()..color = thumbColor,
+    );
+
+    // Inner highlight
+    canvas.drawCircle(
+      center.translate(-radius * 0.28, -radius * 0.28),
+      radius * 0.32,
+      Paint()..color = Colors.white.withOpacity(0.28),
+    );
+  }
+}
 
 class _TickerBadge extends StatelessWidget {
   final String ticker;

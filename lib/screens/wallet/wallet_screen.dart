@@ -21,20 +21,24 @@ class WalletScreen extends StatefulWidget {
 
 class _WalletScreenState extends State<WalletScreen> {
   final AuthService _authService = AuthService();
+  final BalcaoService _balcaoService = BalcaoService();
   late final Stream<Wallet> _walletStream;
   late final Stream<List<WalletHolding>> _holdingsStream;
+  late final Stream<List<OrderHistoryEntry>> _orderHistoryStream;
   Future<List<WalletTransaction>>? _transacoesFuture;
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'pt_BR',
     symbol: 'R\$ ',
     decimalDigits: 2,
   );
+  final DateFormat _dateFormat = DateFormat('dd MMM HH:mm', 'pt_BR');
 
   @override
   void initState() {
     super.initState();
-    _walletStream = BalcaoService().watchWallet();
+    _walletStream = _balcaoService.watchWallet();
     _holdingsStream = _buildHoldingsStream();
+    _orderHistoryStream = _balcaoService.watchOrderHistory();
     _carregarHistorico();
   }
 
@@ -43,55 +47,30 @@ class _WalletScreenState extends State<WalletScreen> {
     if (uid == null) return Stream.value(const []);
 
     final db = FirebaseFirestore.instance;
-    // Stream the legacy doc so purchases via comprarTokensStartup update reactively.
-    return db.collection('usuarios').doc(uid).snapshots().asyncMap((legacySnap) async {
-      final Map<String, WalletHolding> map = {};
-
-      // Legacy: usuarios/{uid}.portfolio (written by comprarTokensStartup CF)
-      final portfolio = legacySnap.data()?['portfolio'] as Map<String, dynamic>? ?? {};
-      for (final entry in portfolio.entries) {
-        final startupId = entry.key;
-        final portData = entry.value as Map<String, dynamic>? ?? {};
-        final quantidade = (portData['quantidade'] as num?)?.toInt() ?? 0;
-        if (quantidade <= 0) continue;
-        final startupSnap = await db.collection('startups').doc(startupId).get();
+    return db
+        .collection('usuarios')
+        .doc(uid)
+        .collection('positions')
+        .snapshots()
+        .asyncMap((posSnap) async {
+      final holdings = <WalletHolding>[];
+      for (final posDoc in posSnap.docs) {
+        final tokensLivres =
+            (posDoc.data()['tokens_livres'] as num?)?.toInt() ?? 0;
+        if (tokensLivres <= 0) continue;
+        final startupSnap =
+            await db.collection('startups').doc(posDoc.id).get();
         final sd = startupSnap.data() ?? {};
         final preco = _resolvePreco(sd);
-        map[startupId] = WalletHolding(
-          startupUid: startupId,
-          startupNome: (sd['nome'] as String?) ?? startupId,
+        holdings.add(WalletHolding(
+          startupUid: posDoc.id,
+          startupNome: (sd['nome'] as String?) ?? posDoc.id,
           startupSetor: (sd['setor'] as String?) ?? '',
-          quantidade: quantidade,
+          quantidade: tokensLivres,
           precoMedio: preco,
-          valorInvestido: quantidade * preco,
-        );
+          valorInvestido: tokensLivres * preco,
+        ));
       }
-
-      // New: users/{uid}/positions (written by ordersCreate CF) — takes priority
-      try {
-        final posSnap = await db.collection('users').doc(uid).collection('positions').get();
-        for (final posDoc in posSnap.docs) {
-          final posData = posDoc.data();
-          final tokensLivres = (posData['tokens_livres'] as num?)?.toInt() ?? 0;
-          if (tokensLivres <= 0) {
-            map.remove(posDoc.id);
-            continue;
-          }
-          final startupSnap = await db.collection('startups').doc(posDoc.id).get();
-          final sd = startupSnap.data() ?? {};
-          final preco = _resolvePreco(sd);
-          map[posDoc.id] = WalletHolding(
-            startupUid: posDoc.id,
-            startupNome: (sd['nome'] as String?) ?? posDoc.id,
-            startupSetor: (sd['setor'] as String?) ?? '',
-            quantidade: tokensLivres,
-            precoMedio: preco,
-            valorInvestido: tokensLivres * preco,
-          );
-        }
-      } catch (_) {}
-
-      final holdings = map.values.toList();
       holdings.sort((a, b) => b.valorInvestido.compareTo(a.valorInvestido));
       return holdings;
     });
@@ -103,9 +82,7 @@ class _WalletScreenState extends State<WalletScreen> {
     final st = balcao['state'] as Map<String, dynamic>? ?? {};
     final lastPrice = (st['last_price'] as num?)?.toDouble() ?? 0;
     if (lastPrice > 0) return lastPrice;
-    final precoEmissao = (cfg['preco_emissao'] as num?)?.toDouble() ?? 0;
-    if (precoEmissao > 0) return precoEmissao;
-    return ((sd['precoToken'] ?? sd['preco_token'] ?? 0) as num).toDouble();
+    return (cfg['preco_emissao'] as num?)?.toDouble() ?? 0;
   }
 
   void _carregarHistorico() {
@@ -124,287 +101,330 @@ class _WalletScreenState extends State<WalletScreen> {
           builder: (context, holdingsSnapshot) {
             final holdings = holdingsSnapshot.data ?? const <WalletHolding>[];
 
-        return Scaffold(
-          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
-          body: Column(
-            children: [
-              const SizedBox(height: 20),
-              Container(
-                height: 2,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF6C63FF),
-                      Color(0xFFE040FB),
-                      Color(0xFFFF6B6B),
-                    ],
+            return Scaffold(
+              backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+              body: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  Container(
+                    height: 2,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF6C63FF),
+                          Color(0xFFE040FB),
+                          Color(0xFFFF6B6B),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Carteira',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF9A1C63),
-                              Color(0xFF1A237E),
-                            ],
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Saldo Disponível',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _currencyFormat.format(saldo),
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              PageRouteBuilder(
-                                pageBuilder: (_, __, ___) => AdicionarSaldoScreen(
-                                  saldoAtual: saldo,
-                                  telaRetorno: const WalletScreen(),
-                                ),
-                                transitionDuration: Duration.zero,
-                                reverseTransitionDuration: Duration.zero,
-                              ),
-                            );
-
-                            if (!mounted) return;
-                            setState(_carregarHistorico);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(
-                              color: Color.fromARGB(79, 0, 0, 0),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text(
-                            'Adicionar saldo simulado',
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Carteira',
                             style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
                               color: Colors.black87,
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            PageRouteBuilder(
-                              pageBuilder: (_, __, ___) => const BalcaoScreen(),
-                              transitionDuration: Duration.zero,
-                              reverseTransitionDuration: Duration.zero,
-                            ),
-                          );
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(194, 240, 240, 240),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(
-                                Icons.swap_horiz_outlined,
-                                color: Color.fromARGB(255, 112, 121, 133),
-                                size: 22,
+                          const SizedBox(height: 20),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF9A1C63),
+                                  Color(0xFF1A237E),
+                                ],
                               ),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Comprar ou vender tokens?',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Saldo Disponível',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _currencyFormat.format(saldo),
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  PageRouteBuilder(
+                                    pageBuilder: (_, __, ___) =>
+                                        AdicionarSaldoScreen(
+                                      saldoAtual: saldo,
+                                      telaRetorno: const WalletScreen(),
                                     ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      'Ir para Balcão',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Color(0xFF6C63FF),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
+                                    transitionDuration: Duration.zero,
+                                    reverseTransitionDuration: Duration.zero,
+                                  ),
+                                );
+
+                                if (!mounted) return;
+                                setState(_carregarHistorico);
+                              },
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color.fromARGB(79, 0, 0, 0),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              Icon(
-                                Icons.arrow_forward_ios,
-                                size: 14,
+                              child: const Text(
+                                'Adicionar saldo simulado',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (_, __, ___) =>
+                                      const BalcaoScreen(),
+                                  transitionDuration: Duration.zero,
+                                  reverseTransitionDuration: Duration.zero,
+                                ),
+                              );
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: const Color.fromARGB(194, 240, 240, 240),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.swap_horiz_outlined,
+                                    color: Color.fromARGB(255, 112, 121, 133),
+                                    size: 22,
+                                  ),
+                                  SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Comprar ou vender tokens?',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        SizedBox(height: 2),
+                                        Text(
+                                          'Ir para Balcão',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Color(0xFF6C63FF),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 14,
+                                    color: Colors.black45,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          if (holdings.isNotEmpty) ...[
+                            const Text(
+                              'Tokens na Carteira',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                                 color: Colors.black45,
                               ),
-                            ],
+                            ),
+                            const SizedBox(height: 12),
+                            ...holdings.map(
+                              (holding) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _HoldingCard(
+                                  holding: holding,
+                                  currencyFormat: _currencyFormat,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          StreamBuilder<List<OrderHistoryEntry>>(
+                            stream: _orderHistoryStream,
+                            builder: (context, orderSnap) {
+                              final orders =
+                                  orderSnap.data ?? const <OrderHistoryEntry>[];
+                              if (orders.isEmpty)
+                                return const SizedBox.shrink();
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Histórico de Ordens',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black45,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ...orders.map(
+                                    (order) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: _OrderHistoryCard(
+                                        order: order,
+                                        currencyFormat: _currencyFormat,
+                                        dateFormat: _dateFormat,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              );
+                            },
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      if (holdings.isNotEmpty) ...[
-                        const Text(
-                          'Tokens na Carteira',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black45,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ...holdings.map(
-                          (holding) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _HoldingCard(
-                              holding: holding,
-                              currencyFormat: _currencyFormat,
+                          const Text(
+                            'Histórico de Transações',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black45,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      const Text(
-                        'Histórico de Transações',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black45,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      FutureBuilder<List<WalletTransaction>>(
-                        future: _transacoesFuture,
-                        builder: (context, transacoesSnapshot) {
-                          if (transacoesSnapshot.hasError) {
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Text(
-                                'Nao foi possivel carregar o historico: ${transacoesSnapshot.error}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.redAccent,
-                                ),
-                              ),
-                            );
-                          }
-
-                          if (transacoesSnapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Padding(
-                              padding: EdgeInsets.only(top: 16),
-                              child: Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
-                          }
-
-                          final transacoes = transacoesSnapshot.data ?? const <WalletTransaction>[];
-
-                          if (transacoes.isEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.only(top: 12),
-                              child: Text(
-                                'Nenhuma movimentacao registrada ainda.',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.black45,
-                                ),
-                              ),
-                            );
-                          }
-
-                          return Column(
-                            children: [
-                              ...transacoes.map(
-                                (transacao) => Column(
-                                  children: [
-                                    const Divider(height: 1, color: Color(0xFFEEEEEE)),
-                                    _TransacaoItem(
-                                      titulo: transacao.titulo,
-                                      subtitulo: transacao.subtitulo,
-                                      valor: _formatValorTransacao(
-                                        transacao.valor,
-                                        transacao.positivo,
-                                      ),
-                                      positivo: transacao.positivo,
-                                      direcaoLabel: transacao.positivo
-                                          ? 'Entrada de capital'
-                                          : 'Saida de capital',
-                                      fonte: transacao.fonte,
+                          const SizedBox(height: 4),
+                          FutureBuilder<List<WalletTransaction>>(
+                            future: _transacoesFuture,
+                            builder: (context, transacoesSnapshot) {
+                              if (transacoesSnapshot.hasError) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'Nao foi possivel carregar o historico: ${transacoesSnapshot.error}',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.redAccent,
                                     ),
-                                  ],
-                                ),
-                              ),
-                              const Divider(height: 1, color: Color(0xFFEEEEEE)),
-                            ],
-                          );
-                        },
+                                  ),
+                                );
+                              }
+
+                              if (transacoesSnapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(top: 16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
+
+                              final transacoes = transacoesSnapshot.data ??
+                                  const <WalletTransaction>[];
+
+                              if (transacoes.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'Nenhuma movimentacao registrada ainda.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black45,
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return Column(
+                                children: [
+                                  ...transacoes.map(
+                                    (transacao) => Column(
+                                      children: [
+                                        const Divider(
+                                            height: 1,
+                                            color: Color(0xFFEEEEEE)),
+                                        _TransacaoItem(
+                                          titulo: transacao.titulo,
+                                          subtitulo: transacao.subtitulo,
+                                          valor: _formatValorTransacao(
+                                            transacao.valor,
+                                            transacao.positivo,
+                                          ),
+                                          positivo: transacao.positivo,
+                                          direcaoLabel: transacao.positivo
+                                              ? 'Entrada de capital'
+                                              : 'Saida de capital',
+                                          fonte: transacao.fonte,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Divider(
+                                      height: 1, color: Color(0xFFEEEEEE)),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-          bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+              bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+            );
+          },
         );
       },
     );
-  },
-);
   }
 
   String _formatValorTransacao(double valor, bool positivo) {
@@ -478,12 +498,164 @@ class _HoldingCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'PreÃ§o mÃ©dio: ${currencyFormat.format(holding.precoMedio)}',
+            'Preço Médio: ${currencyFormat.format(holding.precoMedio)}',
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
         ],
       ),
     );
+  }
+}
+
+class _OrderHistoryCard extends StatelessWidget {
+  const _OrderHistoryCard({
+    required this.order,
+    required this.currencyFormat,
+    required this.dateFormat,
+  });
+
+  final OrderHistoryEntry order;
+  final NumberFormat currencyFormat;
+  final DateFormat dateFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBuy = order.side == 'buy';
+    final sideColor = isBuy ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
+    final sideBg = isBuy ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE);
+    final sideLabel = isBuy ? 'Compra' : 'Venda';
+    final typeLabel = order.orderType == 'market' ? 'Market' : 'Limit';
+
+    final statusLabel = _statusLabel(order.status);
+    final statusColor = _statusColor(order.status);
+    final statusBg = _statusBg(order.status);
+
+    final priceText = order.orderType == 'market' && order.price <= 0
+        ? '—'
+        : currencyFormat.format(order.price);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEBEBF0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  order.startupNome.isNotEmpty
+                      ? order.startupNome
+                      : order.startupId,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            dateFormat.format(order.createdAt),
+            style: const TextStyle(fontSize: 11, color: Colors.black45),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: sideBg,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$sideLabel · $typeLabel',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: sideColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${order.qtyOriginal} tkn · $priceText',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(String s) {
+    switch (s) {
+      case 'executada':
+        return 'Executada';
+      case 'parcialmente_executada':
+        return 'Parcial';
+      case 'cancelada':
+        return 'Cancelada';
+      case 'aberta':
+      default:
+        return 'Aberta';
+    }
+  }
+
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'executada':
+        return const Color(0xFF2E7D32);
+      case 'parcialmente_executada':
+        return const Color(0xFFE65100);
+      case 'cancelada':
+        return const Color(0xFFE53935);
+      default:
+        return const Color(0xFF1A237E);
+    }
+  }
+
+  Color _statusBg(String s) {
+    switch (s) {
+      case 'executada':
+        return const Color(0xFFE8F5E9);
+      case 'parcialmente_executada':
+        return const Color(0xFFFFF3E0);
+      case 'cancelada':
+        return const Color(0xFFFFEBEE);
+      default:
+        return const Color(0xFFE8E6FF);
+    }
   }
 }
 
@@ -510,10 +682,10 @@ class _TransacaoItem extends StatelessWidget {
         positivo ? const Color(0xFF2E7D32) : const Color(0xFFE53935);
     final backgroundColor =
         positivo ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE);
-    
-    final fonteColor = fonte == "Externo" 
-        ? const Color(0xFF1976D2) 
-        : fonte == "Mercado" 
+
+    final fonteColor = fonte == "Externo"
+        ? const Color(0xFF1976D2)
+        : fonte == "Mercado"
             ? const Color(0xFF7B1FA2)
             : const Color(0xFF616161);
     final fonteBgColor = fonte == "Externo"

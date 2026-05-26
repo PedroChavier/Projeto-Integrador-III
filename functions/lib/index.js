@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listarStartups = exports.comprarTokensStartup = exports.creditarSaldoSimulado = exports.verificarCodigoMfaCallable = exports.solicitarCodigoMfa = exports.redefinirSenhaComCodigo = exports.solicitarCodigoRecuperacaoSenha = exports.excluirPerfilAoExcluirAuth = exports.registrarUsuario = void 0;
+exports.listarStartups = exports.creditarSaldoSimulado = exports.verificarCodigoMfaCallable = exports.solicitarCodigoMfa = exports.redefinirSenhaComCodigo = exports.solicitarCodigoRecuperacaoSenha = exports.excluirPerfilAoExcluirAuth = exports.registrarUsuario = void 0;
 const node_crypto_1 = require("node:crypto");
 const net = __importStar(require("node:net"));
 const tls = __importStar(require("node:tls"));
@@ -65,10 +65,20 @@ exports.registrarUsuario = functions
     const payload = normalizarPayload(data, context.auth.token.email);
     const userId = context.auth.uid;
     await validarCpfDisponivel(payload.cpf, userId);
+    const existingSnapshot = await usuariosCollection.doc(userId).get();
+    const existingData = existingSnapshot.data() ?? {};
+    const existingRole = typeof existingData.role === "string" && existingData.role.trim().length > 0
+        ? existingData.role
+        : "user";
+    const existingIsAdmin = typeof existingData.isAdmin === "boolean" ? existingData.isAdmin : false;
     await usuariosCollection.doc(userId).set({
         ...payload,
         uid: userId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        role: existingRole,
+        isAdmin: existingIsAdmin,
+        createdAt: existingSnapshot.exists && existingData.createdAt
+            ? existingData.createdAt
+            : admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     return {
@@ -257,32 +267,12 @@ exports.creditarSaldoSimulado = functions
     const valor = sanitizePositiveNumber(data.valor, "Valor");
     const usuarioRef = usuariosCollection.doc(uid);
     const transacaoRef = usuarioRef.collection("transacoes").doc();
-    const usuarioSnapshot = await usuarioRef.get();
+    const walletMainRef = usuarioRef.collection("wallet").doc("main");
     const batch = db.batch();
-    if (usuarioSnapshot.exists) {
-        batch.set(usuarioRef, {
-            saldo: admin.firestore.FieldValue.increment(valor),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-    }
-    else {
-        const authUser = await admin.auth().getUser(uid);
-        batch.set(usuarioRef, {
-            uid,
-            fullName: authUser.displayName?.trim() ?? "",
-            email: authUser.email?.trim().toLowerCase() ?? "",
-            telefone: authUser.phoneNumber?.replace(/\D/g, "") ?? "",
-            cpf: "",
-            saldo: valor,
-            role: "user",
-            isAdmin: false,
-            mfaHabilitado: false,
-            userActive: true,
-            userloggedIn: true,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-    }
+    batch.set(walletMainRef, {
+        saldo_brl: admin.firestore.FieldValue.increment(valor),
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
     batch.set(transacaoRef, {
         tipo: "deposito",
         titulo: "Credito Simulado",
@@ -296,99 +286,6 @@ exports.creditarSaldoSimulado = functions
     return {
         success: true,
         valor,
-    };
-});
-exports.comprarTokensStartup = functions
-    .region("southamerica-east1")
-    .https.onCall(async (data, context) => {
-    const uid = context.auth?.uid;
-    if (!uid) {
-        throw new functions.https.HttpsError("unauthenticated", "Usuario nao autenticado.");
-    }
-    const startupUid = sanitizeRequiredString(data.startupUid, "Startup");
-    const quantidade = sanitizePositiveInteger(data.quantidade, "Quantidade");
-    const startupRef = db.collection("startups").doc(startupUid);
-    const usuarioRef = usuariosCollection.doc(uid);
-    const transacaoRef = usuarioRef.collection("transacoes").doc();
-    const [startupSnapshot, usuarioSnapshot] = await Promise.all([
-        startupRef.get(),
-        usuarioRef.get(),
-    ]);
-    if (!startupSnapshot.exists) {
-        throw new functions.https.HttpsError("not-found", "Startup nao encontrada.");
-    }
-    const startupData = startupSnapshot.data();
-    // Preço canônico vive na subcoleção balcao/state|config; cai para o mapa embutido / raiz.
-    const [cfgSnap, stSnap] = await Promise.all([
-        startupRef.collection("balcao").doc("config").get(),
-        startupRef.collection("balcao").doc("state").get(),
-    ]);
-    const embBalcao = (typeof startupData.balcao === 'object' && startupData.balcao !== null
-        ? startupData.balcao
-        : {});
-    const balcaoCfg = (cfgSnap.exists ? cfgSnap.data() : (embBalcao.config ?? {}));
-    const balcaoSt = (stSnap.exists ? stSnap.data() : (embBalcao.state ?? {}));
-    let precoToken = toNumber(balcaoSt.last_price) ?? 0;
-    if (!Number.isFinite(precoToken) || precoToken <= 0)
-        precoToken = toNumber(balcaoCfg.preco_emissao) ?? 0;
-    if (!Number.isFinite(precoToken) || precoToken <= 0) {
-        precoToken = pickPrecoFromData(startupData, toNumber(startupData.cptAportado ?? startupData.capitalAportado ?? startupData.cpt ?? balcaoSt.cptAportado) ?? 0, toNumber(startupData.totalTokensEmitidos ?? startupData.totalTokens ?? startupData.tokensEmitidos ?? balcaoCfg.tokens_emitidos) ?? 0);
-    }
-    if (!Number.isFinite(precoToken) || precoToken <= 0) {
-        throw new functions.https.HttpsError("failed-precondition", "A startup nao possui preco de token disponivel.");
-    }
-    const usuarioData = (usuarioSnapshot.data() ?? {});
-    const saldoAtual = toNumber(usuarioData.saldo) ?? 0;
-    const valorTotal = Number((precoToken * quantidade).toFixed(2));
-    if (saldoAtual < valorTotal) {
-        throw new functions.https.HttpsError("failed-precondition", "Saldo insuficiente para concluir a compra.");
-    }
-    const portfolio = toRecord(usuarioData.portfolio);
-    const holdingAtual = toRecord(portfolio[startupUid]);
-    const quantidadeAtual = toNumber(holdingAtual.quantidade) ?? 0;
-    const valorInvestidoAtual = toNumber(holdingAtual.valorInvestido) ?? 0;
-    const novaQuantidade = quantidadeAtual + quantidade;
-    const novoValorInvestido = Number((valorInvestidoAtual + valorTotal).toFixed(2));
-    const precoMedio = novaQuantidade > 0
-        ? Number((novoValorInvestido / novaQuantidade).toFixed(2))
-        : 0;
-    const startupNome = typeof startupData.nome === "string" ? startupData.nome.trim() : startupUid;
-    const startupSetor = typeof startupData.setor === "string" ? startupData.setor.trim() : "";
-    const batch = db.batch();
-    batch.set(usuarioRef, {
-        saldo: admin.firestore.FieldValue.increment(-valorTotal),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        portfolio: {
-            [startupUid]: {
-                startupUid,
-                startupNome,
-                startupSetor,
-                quantidade: novaQuantidade,
-                precoMedio,
-                valorInvestido: novoValorInvestido,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-        },
-    }, { merge: true });
-    batch.set(transacaoRef, {
-        tipo: "compra_token",
-        titulo: `Compra de ${startupNome}`,
-        subtitulo: `${quantidade} token(s) a ${formatPrecoBRL(precoToken)}`,
-        valor: valorTotal,
-        positivo: false,
-        fonte: "Mercado",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    batch.set(startupRef, {
-        cptAportado: admin.firestore.FieldValue.increment(valorTotal),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    await batch.commit();
-    return {
-        success: true,
-        startupUid,
-        quantidade,
-        valorTotal,
     };
 });
 // Normaliza a etapa/estágio (strings/nums diversos) para um conjunto reduzido de valores canônicos.
@@ -489,26 +386,6 @@ function formatPrecoBRL(value) {
     const withComma = fixed.replace(".", ",");
     return `R$ ${withComma}`;
 }
-// Seleciona o preço a partir de múltiplos campos possíveis no documento; se não houver, usa fallback (cptAportado / totalTokens).
-function pickPrecoFromData(data, cptAportado, totalTokens) {
-    // tenta campos comuns se existirem
-    const possibleFields = [
-        "preco",
-        "precoToken",
-        "preco_token",
-        "precoTokenAtual",
-        "preco_atual",
-    ];
-    for (const key of possibleFields) {
-        const maybe = toNumber(data[key]);
-        if (maybe !== null)
-            return maybe;
-    }
-    // fallback: preco = cptAportado / totalTokens
-    if (totalTokens > 0)
-        return cptAportado / totalTokens;
-    return 0;
-}
 // Função Callable: lista startups do Firestore e retorna itens formatados (capital/tokens/preço) para o catálogo.
 exports.listarStartups = functions
     .region('southamerica-east1')
@@ -549,17 +426,11 @@ exports.listarStartups = functions
         ]);
         const balcaoCfg = (cfgSnap.exists ? cfgSnap.data() : embCfg);
         const balcaoSt = (stSnap.exists ? stSnap.data() : embSt);
-        const totalTokens = toNumber(balcaoCfg.tokens_emitidos) ??
-            toNumber(data.totalTokensEmitidos ?? data.totalTokens ?? data.tokensEmitidos) ??
-            0;
-        const cptAportado = toNumber(balcaoSt.cptAportado ?? balcaoSt.capitalAportado) ??
-            toNumber(data.cptAportado ?? data.capitalAportado ?? data.cpt) ??
-            0;
+        const totalTokens = toNumber(balcaoCfg.tokens_emitidos) ?? 0;
+        const cptAportado = toNumber(balcaoSt.cptAportado) ?? 0;
         let preco = toNumber(balcaoSt.last_price) ?? 0;
         if (!Number.isFinite(preco) || preco <= 0)
             preco = toNumber(balcaoCfg.preco_emissao) ?? 0;
-        if (!Number.isFinite(preco) || preco <= 0)
-            preco = pickPrecoFromData(data, cptAportado, totalTokens);
         return {
             uid: doc.id,
             nome,
@@ -587,12 +458,10 @@ function normalizarPayload(data, emailAutenticado) {
     const cpf = sanitizeDigits(data.cpf, "CPF");
     const fullName = sanitizeRequiredString(data.fullName, "Nome completo");
     const telefone = sanitizeDigits(data.telefone, "Telefone");
-    const senha = hashPassword(sanitizeRequiredString(data.senha, "Senha"));
     const email = sanitizeEmail(data.email ?? emailAutenticado);
     const dataNascimento = sanitizeBirthDate(data.dataNascimento);
     const mfaHabilitado = Boolean(data.mfaHabilitado);
     const userActive = data.userActive === undefined ? true : Boolean(data.userActive);
-    const userloggedIn = data.userloggedIn === undefined ? true : Boolean(data.userloggedIn);
     if (cpf.length !== 11) {
         throw new functions.https.HttpsError("invalid-argument", "CPF invalido.");
     }
@@ -608,17 +477,10 @@ function normalizarPayload(data, emailAutenticado) {
         fullName,
         dataNascimento,
         email,
-        senha,
         telefone,
         mfaHabilitado,
         userActive,
-        userloggedIn,
     };
-}
-// Hasheia a senha recebida com SHA-256 (com validação mínima de tamanho) antes de salvar no Firestore.
-function hashPassword(password) {
-    validatePasswordPolicy(password);
-    return (0, node_crypto_1.createHash)("sha256").update(password).digest("hex");
 }
 // Sanitiza e valida o código de recuperação (somente dígitos, com tamanho exato).
 function sanitizeRecoveryCode(value) {
@@ -693,21 +555,6 @@ function sanitizeMfaChannel(value) {
 function sanitizePositiveNumber(value, fieldName) {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
         throw new functions.https.HttpsError("invalid-argument", `${fieldName} invalido.`);
-    }
-    return value;
-}
-function sanitizePositiveInteger(value, fieldName) {
-    if (typeof value !== "number" ||
-        !Number.isInteger(value) ||
-        !Number.isFinite(value) ||
-        value <= 0) {
-        throw new functions.https.HttpsError("invalid-argument", `${fieldName} invalida.`);
-    }
-    return value;
-}
-function toRecord(value) {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        return {};
     }
     return value;
 }

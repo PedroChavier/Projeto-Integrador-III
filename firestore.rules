@@ -16,14 +16,13 @@ service cloud.firestore {
     }
 
     function keepsProtectedUserFields() {
-      // Não exigir igualdade exata de createdAt:
-      // - o app usa serverTimestamp() / set() e isso pode gerar mismatch no update
-      // - createdAt é “protected”, então ainda bloqueamos alterações em campos sensíveis
-      return request.resource.data.uid == resource.data.uid &&
-        request.resource.data.cpf == resource.data.cpf &&
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.role == resource.data.role &&
-        request.resource.data.isAdmin == resource.data.isAdmin;
+      // Bloqueia alterações em campos sensíveis sem exigir que eles existam no
+      // documento. Usamos diff().affectedKeys() porque comparar campos ausentes
+      // diretamente em request.resource.data falha quando o documento criado
+      // pelo backend não inclui role/isAdmin (perfis legados ou criados via
+      // Admin SDK na Cloud Function de registro).
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['uid', 'cpf', 'email', 'role', 'isAdmin', 'createdAt']);
     }
 
     match /startups/{startupId} {
@@ -37,12 +36,17 @@ service cloud.firestore {
     }
 
     // New balcão system — wallet and positions per user
-    match /users/{userId}/wallet/{doc} {
+    match /usuarios/{userId}/wallet/{doc} {
       allow read: if isOwner(userId);
       allow write: if false;
     }
 
-    match /users/{userId}/positions/{startupId} {
+    match /usuarios/{userId}/positions/{startupId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    match /usuarios/{userId}/order_history/{orderId} {
       allow read: if isOwner(userId);
       allow write: if false;
     }
@@ -62,6 +66,12 @@ service cloud.firestore {
     match /usuarios/{userId}/transacoes/{transacaoId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId);
+      allow update, delete: if false;
+    }
+
+    match /perguntas/{perguntaId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.idAutor == request.auth.uid;
       allow update, delete: if false;
     }
 

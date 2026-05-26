@@ -7,8 +7,9 @@ import '../startups/startup_society.dart';
 import '../startups/startup_documents.dart';
 import '../startups/startup_questions.dart';
 import '../home/home_screen.dart';
+import '../../models/orderbook_models.dart' show Wallet;
 import '../../models/startup.dart';
-import '../../services/auth_service.dart';
+import '../../services/balcao_service.dart';
 import '../../services/startup_service.dart';
 
 class StartupDetalheScreen extends StatefulWidget {
@@ -24,7 +25,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final StartupService _service = StartupService();
-  final AuthService _authService = AuthService();
+  final BalcaoService _balcaoService = BalcaoService();
   Startup? _startup;
   bool _carregando = true;
   bool _comprando = false;
@@ -46,7 +47,8 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
         setState(() {
           _startup = startup;
           _carregando = false;
-          _erroCarregamento = startup == null ? 'Startup não encontrada.' : null;
+          _erroCarregamento =
+              startup == null ? 'Startup não encontrada.' : null;
         });
       }
     } catch (e) {
@@ -63,32 +65,14 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // New balcão system
     try {
       final snap = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('usuarios')
           .doc(uid)
           .collection('positions')
           .doc(widget.startupUid)
           .get();
-      if (snap.exists) {
-        final tokens = (snap.data()?['tokens_livres'] as num?)?.toInt() ?? 0;
-        if (mounted) setState(() => _tokensNaCarteira = tokens);
-        return;
-      }
-    } catch (_) {}
-
-    // Fallback: old comprarTokensStartup portfolio
-    try {
-      final legacySnap = await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(uid)
-          .get();
-      final portfolio =
-          legacySnap.data()?['portfolio'] as Map<String, dynamic>? ?? {};
-      final posData =
-          portfolio[widget.startupUid] as Map<String, dynamic>? ?? {};
-      final tokens = (posData['quantidade'] as num?)?.toInt() ?? 0;
+      final tokens = (snap.data()?['tokens_livres'] as num?)?.toInt() ?? 0;
       if (mounted) setState(() => _tokensNaCarteira = tokens);
     } catch (_) {}
   }
@@ -140,147 +124,152 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
     if (startup == null || _comprando) return;
 
     final quantidadeController = TextEditingController(text: '1');
-    double? saldoAtual;
+    final Wallet wallet = await _balcaoService.watchWallet().first;
+    if (!mounted) {
+      quantidadeController.dispose();
+      return;
+    }
+    final saldoAtual = wallet.brl;
 
-    try {
-      // Buscar saldo atual do usuário
-      final profile = await _authService.getCurrentUserProfile();
-      saldoAtual = profile?.saldo ?? 0.0;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final quantidade =
+                int.tryParse(quantidadeController.text.trim()) ?? 0;
+            final total =
+                quantidade > 0 ? quantidade * startup.precoToken : 0.0;
+            final saldoPosCom = saldoAtual - total;
+            final saldoInsuficiente = total > saldoAtual && total > 0;
 
-      final confirmado = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              final quantidade =
-                  int.tryParse(quantidadeController.text.trim()) ?? 0;
-              final total = quantidade > 0
-                  ? quantidade * startup.precoToken
-                  : 0.0;
-              final saldoPosCom = (saldoAtual ?? 0.0) - total;
-              final saldoInsuficiente = total > (saldoAtual ?? 0.0) && total > 0;
-
-              return AlertDialog(
-                title: const Text('Comprar tokens'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      startup.nome ?? 'Startup',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
+            return AlertDialog(
+              title: const Text('Comprar tokens'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    startup.nome ?? 'Startup',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Preço atual: ${_formatarPreco(startup.precoToken)} por token',
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: quantidadeController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Quantidade',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Total estimado: ${_formatarPreco(total)}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5F5F5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Saldo atual: ${_formatarPreco(saldoAtual ?? 0.0)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Saldo após compra: ${_formatarPreco(saldoPosCom.clamp(0, double.infinity))}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: saldoInsuficiente
-                                  ? Colors.redAccent
-                                  : const Color(0xFF2E7D32),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('Cancelar'),
                   ),
-                  ElevatedButton(
-                    onPressed: saldoInsuficiente
-                        ? null
-                        : () {
-                            final parsed =
-                                int.tryParse(quantidadeController.text.trim()) ?? 0;
-                            if (parsed <= 0) {
-                              return;
-                            }
-                            Navigator.pop(dialogContext, true);
-                          },
-                    child: const Text('Confirmar compra'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Preço atual: ${_formatarPreco(startup.precoToken)} por token',
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Ordem a mercado — preço final depende do book.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: quantidadeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Quantidade',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Total estimado: ${_formatarPreco(total)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F5F5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Saldo atual: ${_formatarPreco(saldoAtual)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Saldo após compra: ${_formatarPreco(saldoPosCom.clamp(0, double.infinity))}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: saldoInsuficiente
+                                ? Colors.redAccent
+                                : const Color(0xFF2E7D32),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              );
-            },
-          );
-        },
-      );
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: saldoInsuficiente
+                      ? null
+                      : () {
+                          final parsed =
+                              int.tryParse(quantidadeController.text.trim()) ??
+                                  0;
+                          if (parsed <= 0) {
+                            return;
+                          }
+                          Navigator.pop(dialogContext, true);
+                        },
+                  child: const Text('Confirmar compra'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
 
-      if (confirmado != true || !mounted) return;
+    if (confirmado != true || !mounted) {
+      quantidadeController.dispose();
+      return;
+    }
 
-      final quantidade = int.parse(quantidadeController.text.trim());
+    final quantidade = int.parse(quantidadeController.text.trim());
+    quantidadeController.dispose();
 
-      setState(() {
-        _comprando = true;
-      });
+    setState(() => _comprando = true);
 
-      await _authService.comprarTokensStartup(
-        startupUid: widget.startupUid,
-        quantidade: quantidade,
-      );
+    final result = await _balcaoService.createOrder(
+      startupId: widget.startupUid,
+      side: 'buy',
+      orderType: 'market',
+      qty: quantidade,
+    );
 
-      if (!mounted) return;
+    if (!mounted) return;
+    setState(() => _comprando = false);
 
+    if (result.success) {
+      final msg = result.tradesExecuted > 0
+          ? 'Compra executada: $quantidade token(s) de ${startup.nome ?? 'startup'}.'
+          : 'Ordem enviada — aguardando contraparte no book.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      await _carregarPosicao();
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Compra concluida: $quantidade token(s) de ${startup.nome ?? 'startup'}.',
-          ),
-        ),
+            content: Text(result.errorMessage ?? 'Erro ao processar compra.')),
       );
-    } catch (error) {
-      if (!mounted) return;
-    } finally {
-      quantidadeController.dispose();
-      if (mounted) {
-        setState(() {
-          _comprando = false;
-        });
-      }
     }
   }
 
@@ -309,23 +298,29 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                   ),
                   if (_carregando)
                     const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else if (_erroCarregamento != null)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             _erroCarregamento!,
-                            style: const TextStyle(fontSize: 13, color: Colors.red),
+                            style: const TextStyle(
+                                fontSize: 13, color: Colors.red),
                           ),
                           const SizedBox(height: 8),
                           TextButton(
                             onPressed: () {
-                              setState(() { _carregando = true; _erroCarregamento = null; });
+                              setState(() {
+                                _carregando = true;
+                                _erroCarregamento = null;
+                              });
                               _carregarStartup();
                             },
                             child: const Text('Tentar novamente'),
@@ -406,22 +401,21 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                             child: Stack(
                               children: [
                                 Container(
+                                    height: 5, color: const Color(0xFFEEEEEE)),
+                                FractionallySizedBox(
+                                  widthFactor: s?.progressoCapital ?? 0,
+                                  child: Container(
                                     height: 5,
-                                    color: const Color(0xFFEEEEEE)),
-                                    FractionallySizedBox(
-                                      widthFactor: s?.progressoCapital ?? 0,
-                                      child: Container(
-                                        height: 5,
-                                        decoration: const BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Color.fromARGB(255, 20, 16, 107),
-                                              Color.fromARGB(255, 140, 4, 104),
-                                            ],
-                                          ),
-                                        ),
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color.fromARGB(255, 20, 16, 107),
+                                          Color.fromARGB(255, 140, 4, 104),
+                                        ],
                                       ),
                                     ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -437,10 +431,12 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                             child: OutlinedButton(
                               onPressed: _comprando ? null : _abrirCompraDireta,
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFF1A237E)),
+                                side:
+                                    const BorderSide(color: Color(0xFF1A237E)),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8)),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                               ),
                               child: _comprando
                                   ? const SizedBox(
@@ -477,12 +473,13 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8)),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 elevation: 0,
                               ),
                               child: Text(
                                 _tokensNaCarteira > 0
-                                    ? 'Vender (${_tokensNaCarteira})'
+                                    ? 'Vender ($_tokensNaCarteira)'
                                     : 'Negociar',
                                 style: const TextStyle(
                                   fontSize: 14,

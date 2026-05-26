@@ -114,19 +114,19 @@ function startupBalcaoRef(startupId: string) {
 }
 
 function userWalletRef(uid: string) {
-  return db.collection("users").doc(uid).collection("wallet").doc("main");
+  return db.collection("usuarios").doc(uid).collection("wallet").doc("main");
 }
 
 function userPositionRef(uid: string, startupId: string) {
-  return db.collection("users").doc(uid).collection("positions").doc(startupId);
+  return db.collection("usuarios").doc(uid).collection("positions").doc(startupId);
 }
 
 function userPurchasesRef(uid: string, startupId: string) {
-  return db.collection("users").doc(uid).collection("token_purchases").doc(startupId);
+  return db.collection("usuarios").doc(uid).collection("token_purchases").doc(startupId);
 }
 
 function userOrderHistoryRef(uid: string, orderId: string) {
-  return db.collection("users").doc(uid).collection("order_history").doc(orderId);
+  return db.collection("usuarios").doc(uid).collection("order_history").doc(orderId);
 }
 
 // ─── DB Reads (with embedded-map fallback) ───────────────────────────────────

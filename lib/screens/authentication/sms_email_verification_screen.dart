@@ -11,9 +11,13 @@ class SmsEmailVerificationScreen extends StatefulWidget {
   const SmsEmailVerificationScreen({
     super.key,
     required this.profile,
+    this.onMfaAtivado,
   });
 
   final UserProfile profile;
+  /// Quando fornecido, indica fluxo de ativação de 2FA vindo do perfil.
+  /// Chamado após código verificado com sucesso; a tela é fechada com pop().
+  final Future<void> Function()? onMfaAtivado;
 
   @override
   State<SmsEmailVerificationScreen> createState() =>
@@ -66,14 +70,26 @@ class _SmsEmailVerificationScreenState
 
       _mostrarMensagem('Codigo enviado por $canal para $destino.');
 
-      await Navigator.of(context).push(
+      final resultado = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => Verificacao2FAScreen(
             canal: canal,
             destinoMascarado: destino,
+            onVerificado: widget.onMfaAtivado != null ? () {} : null,
           ),
         ),
       );
+
+      if (resultado == true && widget.onMfaAtivado != null && mounted) {
+        try {
+          await widget.onMfaAtivado!();
+          if (mounted) Navigator.of(context).pop();
+        } catch (_) {
+          if (mounted) {
+            _mostrarMensagem('Erro ao salvar configuracao do 2FA.', isError: true);
+          }
+        }
+      }
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       _mostrarMensagem(
@@ -94,6 +110,12 @@ class _SmsEmailVerificationScreenState
   }
 
   Future<void> _voltarParaLogin() async {
+    // No fluxo de ativação (vindo do perfil), apenas volta sem encerrar sessão.
+    if (widget.onMfaAtivado != null) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -219,25 +241,38 @@ class _SmsEmailVerificationScreenState
                             color: Colors.black87,
                             height: 1.5,
                           ),
-                          children: [
-                            const TextSpan(text: 'A conta de '),
-                            TextSpan(
-                              text: widget.profile.displayName,
-                              style: const TextStyle(
-                                color: Color(0xFF6C63FF),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const TextSpan(
-                              text: ' possui autenticacao multifator ativa.',
-                            ),
-                          ],
+                          children: widget.onMfaAtivado != null
+                              ? const [
+                                  TextSpan(text: 'Confirme seu acesso para '),
+                                  TextSpan(
+                                    text: 'ativar o 2FA.',
+                                    style: TextStyle(
+                                      color: Color(0xFF6C63FF),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ]
+                              : [
+                                  const TextSpan(text: 'A conta de '),
+                                  TextSpan(
+                                    text: widget.profile.displayName,
+                                    style: const TextStyle(
+                                      color: Color(0xFF6C63FF),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' possui autenticacao multifator ativa.',
+                                  ),
+                                ],
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'Para concluir o login, envie um codigo temporario e depois confirme os 6 digitos recebidos.',
-                        style: TextStyle(
+                      Text(
+                        widget.onMfaAtivado != null
+                            ? 'Escolha como receber o codigo e confirme para ativar a protecao extra na sua conta.'
+                            : 'Para concluir o login, envie um codigo temporario e depois confirme os 6 digitos recebidos.',
+                        style: const TextStyle(
                           fontSize: 13,
                           color: Colors.black54,
                           height: 1.4,

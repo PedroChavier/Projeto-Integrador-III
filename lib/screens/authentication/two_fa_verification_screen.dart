@@ -10,10 +10,14 @@ class Verificacao2FAScreen extends StatefulWidget {
     super.key,
     this.canal = 'SMS',
     this.destinoMascarado = '',
+    this.onVerificado,
   });
 
   final String canal;
   final String destinoMascarado;
+  /// Quando fornecido, indica fluxo de ativação de 2FA (não login).
+  /// Chamado após código válido; a tela é fechada com pop() em vez de ir para Home.
+  final VoidCallback? onVerificado;
 
   @override
   State<Verificacao2FAScreen> createState() => _Verificacao2FAScreenState();
@@ -113,10 +117,15 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
         ),
       );
 
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (route) => false,
-      );
+      if (widget.onVerificado != null) {
+        widget.onVerificado!();
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+      }
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
 
@@ -235,28 +244,41 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     RichText(
-                      text: const TextSpan(
-                        style: TextStyle(
+                      text: TextSpan(
+                        style: const TextStyle(
                           fontSize: 13,
                           color: Colors.black87,
                           height: 1.5,
                         ),
-                        children: [
-                          TextSpan(text: 'Este usuario possui '),
-                          TextSpan(
-                            text: '2FA ativado.',
-                            style: TextStyle(
-                              color: Color(0xFF6C63FF),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                        children: widget.onVerificado != null
+                            ? const [
+                                TextSpan(text: 'Confirmando seu acesso para '),
+                                TextSpan(
+                                  text: 'ativar o 2FA.',
+                                  style: TextStyle(
+                                    color: Color(0xFF6C63FF),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ]
+                            : const [
+                                TextSpan(text: 'Este usuario possui '),
+                                TextSpan(
+                                  text: '2FA ativado.',
+                                  style: TextStyle(
+                                    color: Color(0xFF6C63FF),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'A autenticacao multifator e opcional, desabilite em perfil se necessario',
-                      style: TextStyle(
+                    Text(
+                      widget.onVerificado != null
+                          ? 'Insira o codigo recebido para confirmar que voce tem acesso ao contato cadastrado.'
+                          : 'A autenticacao multifator e opcional, desabilite em perfil se necessario',
+                      style: const TextStyle(
                         fontSize: 13,
                         color: Colors.black54,
                         height: 1.4,
@@ -357,7 +379,7 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
                             ),
                           )
                         : Text(
-                            'Confirmar e entrar',
+                            widget.onVerificado != null ? 'Confirmar' : 'Confirmar e entrar',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,

@@ -18,10 +18,7 @@ class AuthService {
     region: 'southamerica-east1',
   );
 
-  Map<String, dynamic> _buildDefaultUserProfilePayload(
-    User user, {
-    double saldo = 0,
-  }) {
+  Map<String, dynamic> _buildDefaultUserProfilePayload(User user) {
     final fallbackName = user.displayName?.trim() ?? '';
     final fallbackEmail = user.email?.trim().toLowerCase() ?? '';
 
@@ -31,12 +28,10 @@ class AuthService {
       'email': fallbackEmail,
       'telefone': '',
       'cpf': '',
-      'saldo': saldo,
       'role': 'user',
       'isAdmin': false,
       'mfaHabilitado': false,
       'userActive': true,
-      'userloggedIn': true,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -221,20 +216,7 @@ class AuthService {
         return null;
       }
 
-      final merged = Map<String, dynamic>.from(data);
-
-      try {
-        final walletSnap = await _firestore
-            .collection('users')
-            .doc(uid)
-            .collection('wallet')
-            .doc('main')
-            .get();
-        final saldoBrl = (walletSnap.data()?['saldo_brl'] as num?)?.toDouble();
-        if (saldoBrl != null) merged['saldo'] = saldoBrl;
-      } catch (_) {}
-
-      return UserProfile.fromMap(uid, merged);
+      return UserProfile.fromMap(uid, data);
     } on FirebaseException catch (e) {
       debugPrint(
         '[AuthService] getUserProfile error: code=${e.code}, message=${e.message}',
@@ -278,10 +260,34 @@ class AuthService {
       );
     }
 
-    await _firestore.collection('usuarios').doc(user.uid).set({
-      'mfaHabilitado': enabled,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final docRef = _firestore.collection('usuarios').doc(user.uid);
+
+    try {
+      final snapshot = await docRef.get();
+      final payload = <String, dynamic>{
+        'mfaHabilitado': enabled,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (snapshot.exists) {
+        await docRef.update(payload);
+      } else {
+        await docRef.set(
+          {
+            ..._buildDefaultUserProfilePayload(user),
+            ...payload,
+          },
+          SetOptions(merge: true),
+        );
+      }
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint(
+        '[AuthService] updateCurrentUserMfaStatus error: '
+        'code=${error.code}, message=${error.message}',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   Future<void> creditCurrentUserSaldo(double valor) async {
@@ -318,45 +324,6 @@ class AuthService {
       }
 
       throw Exception(error.message ?? 'Nao foi possivel creditar o saldo.');
-    }
-  }
-
-  Future<void> comprarTokensStartup({
-    required String startupUid,
-    required int quantidade,
-  }) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw FirebaseAuthException(
-        code: 'user-not-found',
-        message: 'Usuario nao autenticado.',
-      );
-    }
-
-    if (startupUid.trim().isEmpty) {
-      throw ArgumentError.value(startupUid, 'startupUid', 'Startup invalida.');
-    }
-
-    if (quantidade <= 0) {
-      throw ArgumentError.value(
-        quantidade,
-        'quantidade',
-        'A quantidade deve ser maior que zero.',
-      );
-    }
-
-    try {
-      final callable = _functions.httpsCallable('comprarTokensStartup');
-      await callable.call(<String, dynamic>{
-        'startupUid': startupUid,
-        'quantidade': quantidade,
-      });
-    } on FirebaseFunctionsException catch (error) {
-      debugPrint(
-        '[AuthService] comprarTokensStartup function error: '
-        'code=${error.code}, message=${error.message}',
-      );
-      throw Exception(error.message ?? 'Nao foi possivel concluir a compra.');
     }
   }
 

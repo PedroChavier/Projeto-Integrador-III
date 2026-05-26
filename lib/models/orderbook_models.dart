@@ -226,6 +226,32 @@ class OrderbookState extends ChangeNotifier {
     return total / qty;
   }
 
+  int estimateMarketQtyForValue(String side, double amount) {
+    if (amount <= 0) return 0;
+    final book = side == 'buy' ? sortedSellBook : sortedBuyBook;
+    if (book.isEmpty) return 0;
+
+    var remaining = amount;
+    var qty = 0;
+    for (final order in book) {
+      final fullLevelCost = order.qty * order.price;
+      if (remaining >= fullLevelCost) {
+        qty += order.qty;
+        remaining -= fullLevelCost;
+        continue;
+      }
+
+      qty += (remaining / order.price).floor();
+      break;
+    }
+    return qty;
+  }
+
+  int availableMarketQty(String side) {
+    final book = side == 'buy' ? sortedSellBook : sortedBuyBook;
+    return book.fold(0, (total, order) => total + order.qty);
+  }
+
   void setTab(String tab) {
     currentTab = tab;
     notifyListeners();

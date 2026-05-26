@@ -150,11 +150,9 @@ class _CadastroScreenState extends State<CadastroScreen> {
       fullName: nome,
       dataNascimento: dataNascimento,
       email: email,
-      senha: senha,
       telefone: telefone,
       mfaHabilitado: false,
       userActive: true,
-      userloggedIn: false,
     );
 
     if (!usuario.cadastrarUsuario()) {
@@ -168,7 +166,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _registrationService.registerUser(usuario);
+      await _registrationService.registerUser(usuario, senha: senha);
 
       if (!mounted) return;
 
@@ -640,48 +638,64 @@ class _CadastroScreenState extends State<CadastroScreen> {
                   hint: 'Digite sua senha',
                   enabledBorderColor: _corBordaSenhas,
                   focusedBorderColor: _corBordaSenhas,
-                  suffixIcon: SizedBox(
-                    width: 120,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'Limpar senhas',
-                          icon: const Icon(
-                            Icons.cleaning_services_outlined,
-                            color: Colors.black38,
-                            size: 20,
-                          ),
-                          onPressed: _isLoading ? null : _limparSenhas,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Limpar senhas',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
                         ),
-                        IconButton(
-                          tooltip: 'Gerar senha segura',
-                          icon: const Icon(
-                            Icons.password_outlined,
-                            color: Colors.black38,
-                            size: 20,
-                          ),
-                          onPressed: _isLoading ? null : _gerarSenhaAleatoria,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.cleaning_services_outlined,
+                          color: Colors.black38,
+                          size: 20,
                         ),
-                        IconButton(
-                          tooltip: _obscureSenha
-                              ? 'Mostrar senha'
-                              : 'Ocultar senha',
-                          icon: Icon(
-                            _obscureSenha
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: Colors.black38,
-                            size: 20,
-                          ),
-                          onPressed: _isLoading
-                              ? null
-                              : () => setState(
-                                  () => _obscureSenha = !_obscureSenha,
-                                ),
+                        onPressed: _isLoading ? null : _limparSenhas,
+                      ),
+                      IconButton(
+                        tooltip: 'Gerar senha segura',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
                         ),
-                      ],
-                    ),
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.password_outlined,
+                          color: Colors.black38,
+                          size: 20,
+                        ),
+                        onPressed: _isLoading ? null : _gerarSenhaAleatoria,
+                      ),
+                      IconButton(
+                        tooltip: _obscureSenha
+                            ? 'Mostrar senha'
+                            : 'Ocultar senha',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(
+                          _obscureSenha
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: Colors.black38,
+                          size: 20,
+                        ),
+                        onPressed: _isLoading
+                            ? null
+                            : () => setState(
+                                () => _obscureSenha = !_obscureSenha,
+                              ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                   ),
                 ),
               ),

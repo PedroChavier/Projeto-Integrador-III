@@ -16,20 +16,27 @@ class BalcaoService {
   // ── Startups ──────────────────────────────────────────────────────────────
 
   Future<List<Startup>> fetchStartups() async {
-    final snap = await _db
-        .collection('startups')
-        .get();
+    final snap = await _db.collection('startups').get();
 
     return snap.docs.map((doc) {
       final d = doc.data();
-      final balcao = d['balcao'] is Map ? Map<String, dynamic>.from(d['balcao'] as Map) : <String, dynamic>{};
-      final cfg = balcao['config'] is Map ? Map<String, dynamic>.from(balcao['config'] as Map) : <String, dynamic>{};
-      final st = balcao['state'] is Map ? Map<String, dynamic>.from(balcao['state'] as Map) : <String, dynamic>{};
+      final balcao = d['balcao'] is Map
+          ? Map<String, dynamic>.from(d['balcao'] as Map)
+          : <String, dynamic>{};
+      final cfg = balcao['config'] is Map
+          ? Map<String, dynamic>.from(balcao['config'] as Map)
+          : <String, dynamic>{};
+      final st = balcao['state'] is Map
+          ? Map<String, dynamic>.from(balcao['state'] as Map)
+          : <String, dynamic>{};
       final nome = (d['nome'] as String?) ?? doc.id;
       final siglaRaw = d['sigla'] as String?;
       final sigla = (siglaRaw != null && siglaRaw.isNotEmpty)
           ? siglaRaw
-          : nome.replaceAll(' ', '').substring(0, nome.replaceAll(' ', '').length.clamp(0, 4)).toUpperCase();
+          : nome
+              .replaceAll(' ', '')
+              .substring(0, nome.replaceAll(' ', '').length.clamp(0, 4))
+              .toUpperCase();
 
       return Startup(
         id: doc.id,
@@ -88,68 +95,100 @@ class BalcaoService {
         .doc('state')
         .snapshots()
         .asyncMap((subSnap) async {
-          if (subSnap.exists) {
-            final d = subSnap.data()!;
-            final cfg = await _db
-                .collection('startups')
-                .doc(startupId)
-                .collection('balcao')
-                .doc('config')
-                .get();
-            final emitted =
-                (cfg.data()?['tokens_emitidos'] as num?)?.toInt() ?? 0;
-            return (
-              lastPrice: (d['last_price'] as num?)?.toDouble(),
-              tokensVendidos:
-                  (d['tokens_vendidos_startup'] as num?)?.toInt() ?? 0,
-              tokensEmitidos: emitted,
-            );
-          }
-          // fallback: read embedded
-          final startupSnap =
-              await _db.collection('startups').doc(startupId).get();
-          final balcao =
-              startupSnap.data()?['balcao'] as Map<String, dynamic>? ?? {};
-          final st = balcao['state'] as Map<String, dynamic>? ?? {};
-          final cfg = balcao['config'] as Map<String, dynamic>? ?? {};
-          return (
-            lastPrice: (st['last_price'] as num?)?.toDouble(),
-            tokensVendidos:
-                (st['tokens_vendidos_startup'] as num?)?.toInt() ?? 0,
-            tokensEmitidos: (cfg['tokens_emitidos'] as num?)?.toInt() ?? 0,
-          );
-        });
+      if (subSnap.exists) {
+        final d = subSnap.data()!;
+        final cfg = await _db
+            .collection('startups')
+            .doc(startupId)
+            .collection('balcao')
+            .doc('config')
+            .get();
+        final emitted = (cfg.data()?['tokens_emitidos'] as num?)?.toInt() ?? 0;
+        return (
+          lastPrice: (d['last_price'] as num?)?.toDouble(),
+          tokensVendidos: (d['tokens_vendidos_startup'] as num?)?.toInt() ?? 0,
+          tokensEmitidos: emitted,
+        );
+      }
+      // fallback: read embedded
+      final startupSnap = await _db.collection('startups').doc(startupId).get();
+      final balcao =
+          startupSnap.data()?['balcao'] as Map<String, dynamic>? ?? {};
+      final st = balcao['state'] as Map<String, dynamic>? ?? {};
+      final cfg = balcao['config'] as Map<String, dynamic>? ?? {};
+      return (
+        lastPrice: (st['last_price'] as num?)?.toDouble(),
+        tokensVendidos: (st['tokens_vendidos_startup'] as num?)?.toInt() ?? 0,
+        tokensEmitidos: (cfg['tokens_emitidos'] as num?)?.toInt() ?? 0,
+      );
+    });
   }
 
   Stream<Wallet> watchWallet() {
     final uid = _uid;
-    if (uid == null) return Stream.value(Wallet(brl: 0, tokens: 0, tokensReserved: 0));
-    // Stream the legacy doc so deposits via creditarSaldoSimulado update reactively.
-    // On each event, prefer the new wallet/main if it exists.
+    if (uid == null)
+      return Stream.value(Wallet(brl: 0, tokens: 0, tokensReserved: 0));
     return _db
         .collection('usuarios')
         .doc(uid)
+        .collection('wallet')
+        .doc('main')
         .snapshots()
-        .asyncMap((legacySnap) async {
+        .map((snap) {
+      final d = snap.data() ?? const <String, dynamic>{};
+      return Wallet(
+        brl: (d['saldo_brl'] as num?)?.toDouble() ?? 0,
+        tokens: 0,
+        tokensReserved: (d['saldo_brl_reservado'] as num?)?.toInt() ?? 0,
+      );
+    });
+  }
+
+  Stream<List<OrderHistoryEntry>> watchOrderHistory({int limit = 50}) {
+    final uid = _uid;
+    if (uid == null) return Stream.value(const []);
+    return _db
+        .collection('usuarios')
+        .doc(uid)
+        .collection('order_history')
+        .orderBy('created_at', descending: true)
+        .limit(limit)
+        .snapshots()
+        .asyncMap((snap) async {
+      final cache = <String, String>{};
+      final entries = <OrderHistoryEntry>[];
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final startupId = (d['startup_id'] as String?) ?? '';
+        String startupNome = cache[startupId] ?? '';
+        if (startupNome.isEmpty && startupId.isNotEmpty) {
           try {
-            final walletSnap = await _db
-                .collection('users')
-                .doc(uid)
-                .collection('wallet')
-                .doc('main')
-                .get();
-            if (walletSnap.exists) {
-              final d = walletSnap.data()!;
-              return Wallet(
-                brl: (d['saldo_brl'] as num?)?.toDouble() ?? 0,
-                tokens: 0,
-                tokensReserved: (d['saldo_brl_reservado'] as num?)?.toInt() ?? 0,
-              );
-            }
-          } catch (_) {}
-          final brl = (legacySnap.data()?['saldo'] as num?)?.toDouble() ?? 0;
-          return Wallet(brl: brl, tokens: 0, tokensReserved: 0);
-        });
+            final s = await _db.collection('startups').doc(startupId).get();
+            startupNome = (s.data()?['nome'] as String?) ?? startupId;
+            cache[startupId] = startupNome;
+          } catch (_) {
+            startupNome = startupId;
+          }
+        }
+        final changes = (d['status_changes'] as List?) ?? const [];
+        final lastStatus = changes.isNotEmpty
+            ? ((changes.last as Map?)?['status'] as String?) ?? 'aberta'
+            : 'aberta';
+        entries.add(OrderHistoryEntry(
+          id: doc.id,
+          startupId: startupId,
+          startupNome: startupNome,
+          side: (d['side'] as String?) ?? 'buy',
+          orderType: (d['order_type'] as String?) ?? 'market',
+          price: (d['price'] as num?)?.toDouble() ?? 0,
+          qtyOriginal: (d['qty_original'] as num?)?.toInt() ?? 0,
+          status: lastStatus,
+          createdAt:
+              (d['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        ));
+      }
+      return entries;
+    });
   }
 
   Stream<({int tokensLivres, int tokensReservados})> watchPosition(
@@ -159,19 +198,19 @@ class BalcaoService {
       return Stream.value((tokensLivres: 0, tokensReservados: 0));
     }
     return _db
-        .collection('users')
+        .collection('usuarios')
         .doc(uid)
         .collection('positions')
         .doc(startupId)
         .snapshots()
         .map((snap) {
-          if (!snap.exists) return (tokensLivres: 0, tokensReservados: 0);
-          final d = snap.data()!;
-          return (
-            tokensLivres: (d['tokens_livres'] as num?)?.toInt() ?? 0,
-            tokensReservados: (d['tokens_reservados'] as num?)?.toInt() ?? 0,
-          );
-        });
+      if (!snap.exists) return (tokensLivres: 0, tokensReservados: 0);
+      final d = snap.data()!;
+      return (
+        tokensLivres: (d['tokens_livres'] as num?)?.toInt() ?? 0,
+        tokensReservados: (d['tokens_reservados'] as num?)?.toInt() ?? 0,
+      );
+    });
   }
 
   // ── Order actions ─────────────────────────────────────────────────────────
@@ -223,7 +262,8 @@ class BalcaoService {
         errorMessage: _humanizeError(e.message),
       );
     } catch (e) {
-      return CancelResult(success: false, errorMessage: 'Erro ao cancelar ordem.');
+      return CancelResult(
+          success: false, errorMessage: 'Erro ao cancelar ordem.');
     }
   }
 
@@ -342,4 +382,28 @@ class CancelResult {
   final String? errorMessage;
 
   const CancelResult({required this.success, this.errorMessage});
+}
+
+class OrderHistoryEntry {
+  final String id;
+  final String startupId;
+  final String startupNome;
+  final String side; // 'buy' | 'sell'
+  final String orderType; // 'market' | 'limit'
+  final double price;
+  final int qtyOriginal;
+  final String status; // último status em status_changes
+  final DateTime createdAt;
+
+  const OrderHistoryEntry({
+    required this.id,
+    required this.startupId,
+    required this.startupNome,
+    required this.side,
+    required this.orderType,
+    required this.price,
+    required this.qtyOriginal,
+    required this.status,
+    required this.createdAt,
+  });
 }
