@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/orderbook_models.dart';
+import '../../models/wallet_holding.dart';
 import '../../services/auth_service.dart';
 import '../../services/balcao_service.dart';
 import '../home/home_screen.dart';
@@ -47,6 +48,10 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   List<Startup> _startups = [];
   int _startupSelecionada = 0;
 
+  // Posições do usuário em todas as startups: startupId -> total tokens
+  Map<String, int> _posicoes = const {};
+  StreamSubscription<List<WalletHolding>>? _posicoesSub;
+
   // Stream subscriptions – cancelled on startup change and dispose
   StreamSubscription<(List<Order>, List<Order>)>? _ordersSub;
   StreamSubscription<List<Trade>>? _tradesSub;
@@ -69,6 +74,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           precoEmissao: 0,
           tokensEmitidos: 0),
     );
+    _posicoesSub = _service.watchHoldings().listen((holdings) {
+      if (!mounted) return;
+      setState(() {
+        _posicoes = {
+          for (final h in holdings) h.startupUid: h.quantidadeTotal,
+        };
+      });
+    });
     _loadStartups();
   }
 
@@ -181,6 +194,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   @override
   void dispose() {
+    _posicoesSub?.cancel();
     _cancelSubscriptions();
     _priceController.dispose();
     _qtyController.dispose();
@@ -500,6 +514,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   final item = _startups[index];
                   final selected = index == _startupSelecionada;
                   final positive = item.variation >= 0;
+                  final qtdTokens = _posicoes[item.id] ?? 0;
                   return InkWell(
                     onTap: () => _changeStartup(index),
                     child: Container(
@@ -542,6 +557,26 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                               ],
                             ),
                           ),
+                          if (qtdTokens > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8ECF8),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '${_orderbookState.formatQty(qtdTokens)} ${_ticker(item)}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: _accent,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           if (selected)
                             const Icon(Icons.check_circle_rounded,
                                 color: _accent, size: 18),
