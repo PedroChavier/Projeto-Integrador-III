@@ -446,7 +446,7 @@ class _HoldingCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${holding.quantidadeTotal} token(s)',
+                    '${holding.quantidadeTotal} ${holding.startupSigla}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -457,7 +457,7 @@ class _HoldingCard extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 3),
                       child: Text(
-                        '${holding.quantidadeReservada} em ordens',
+                        '${holding.quantidadeReservada} ${holding.startupSigla} em ordens',
                         style: const TextStyle(
                           fontSize: 11,
                           color: Color(0xFFE65100),
@@ -613,7 +613,7 @@ class _OrderHistoryCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${order.qtyOriginal} tokens · $priceText',
+                      '${order.qtyOriginal} ${order.startupSigla.isNotEmpty ? order.startupSigla : 'tkn'} · $priceText',
                       textAlign: TextAlign.right,
                       style: const TextStyle(
                         fontSize: 10,

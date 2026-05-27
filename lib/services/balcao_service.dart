@@ -194,9 +194,15 @@ class BalcaoService {
             : (cfg['preco_emissao'] as num?)?.toDouble() ?? 0;
 
         final totalTokens = tokensLivres + tokensReservados;
+        final nomeRaw = (sd['nome'] as String?) ?? posDoc.id;
+        final siglaRaw = sd['sigla'] as String?;
+        final sigla = (siglaRaw != null && siglaRaw.isNotEmpty)
+            ? siglaRaw
+            : nomeRaw.replaceAll(' ', '').substring(0, nomeRaw.replaceAll(' ', '').length.clamp(0, 4)).toUpperCase();
         holdings.add(WalletHolding(
           startupUid: posDoc.id,
-          startupNome: (sd['nome'] as String?) ?? posDoc.id,
+          startupNome: nomeRaw,
+          startupSigla: sigla,
           startupSetor: (sd['setor'] as String?) ?? '',
           quantidade: tokensLivres,
           quantidadeReservada: tokensReservados,
@@ -226,10 +232,16 @@ class BalcaoService {
         final d = doc.data();
         final startupId = (d['startup_id'] as String?) ?? '';
         String startupNome = cache[startupId] ?? '';
+        String startupSigla = '';
         if (startupNome.isEmpty && startupId.isNotEmpty) {
           try {
             final s = await _db.collection('startups').doc(startupId).get();
-            startupNome = (s.data()?['nome'] as String?) ?? startupId;
+            final sd = s.data() ?? {};
+            startupNome = (sd['nome'] as String?) ?? startupId;
+            final siglaRaw = sd['sigla'] as String?;
+            startupSigla = (siglaRaw != null && siglaRaw.isNotEmpty)
+                ? siglaRaw
+                : startupNome.replaceAll(' ', '').substring(0, startupNome.replaceAll(' ', '').length.clamp(0, 4)).toUpperCase();
             cache[startupId] = startupNome;
           } catch (_) {
             startupNome = startupId;
@@ -243,6 +255,7 @@ class BalcaoService {
           id: doc.id,
           startupId: startupId,
           startupNome: startupNome,
+          startupSigla: startupSigla,
           side: (d['side'] as String?) ?? 'buy',
           orderType: (d['order_type'] as String?) ?? 'market',
           price: (d['price'] as num?)?.toDouble() ?? 0,
@@ -457,6 +470,7 @@ class OrderHistoryEntry {
   final String id;
   final String startupId;
   final String startupNome;
+  final String startupSigla;
   final String side; // 'buy' | 'sell'
   final String orderType; // 'market' | 'limit'
   final double price;
@@ -468,6 +482,7 @@ class OrderHistoryEntry {
     required this.id,
     required this.startupId,
     required this.startupNome,
+    this.startupSigla = '',
     required this.side,
     required this.orderType,
     required this.price,

@@ -478,7 +478,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              '${_stateText(startup)}  ·  ${_orderbookState.formatQty(startup.tokensEmitidos)} tokens',
+                              '${_stateText(startup)}  ·  ${_orderbookState.formatQty(startup.tokensEmitidos)} ${_ticker(startup)}',
                               style:
                                   const TextStyle(fontSize: 11, color: _muted),
                             ),
@@ -1545,7 +1545,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                 _buildSummaryLine(
                   'Quantidade',
                   state.inputQty > 0
-                      ? '${state.formatQty(state.inputQty)} tokens'
+                      ? '${state.formatQty(state.inputQty)} $ticker'
                       : '—',
                 ),
                 _buildSummaryLine(
@@ -2110,7 +2110,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                     ),
                     Expanded(
                       child: Text(
-                        '${state.formatQty(trade.qty)} tkn',
+                        '${state.formatQty(trade.qty)} ${_ticker(state.currentStartup)}',
                         textAlign: TextAlign.right,
                         style: const TextStyle(fontSize: 11, color: _muted),
                       ),
