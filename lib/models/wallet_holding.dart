@@ -4,6 +4,7 @@ class WalletHolding {
     required this.startupNome,
     required this.startupSetor,
     required this.quantidade,
+    this.quantidadeReservada = 0,
     required this.precoMedio,
     required this.valorInvestido,
   });
@@ -12,10 +13,13 @@ class WalletHolding {
   final String startupNome;
   final String startupSetor;
   final int quantidade;
+  final int quantidadeReservada;
   final double precoMedio;
   final double valorInvestido;
 
-  double get valorAtualEstimado => quantidade * precoMedio;
+  int get quantidadeTotal => quantidade + quantidadeReservada;
+
+  double get valorAtualEstimado => quantidadeTotal * precoMedio;
 
   factory WalletHolding.fromMap(String startupUid, Map<String, dynamic> map) {
     return WalletHolding(

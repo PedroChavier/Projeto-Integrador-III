@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/orderbook_models.dart';
+import '../models/wallet_holding.dart';
 
 class BalcaoService {
   final _db = FirebaseFirestore.instance;
@@ -18,17 +19,10 @@ class BalcaoService {
   Future<List<Startup>> fetchStartups() async {
     final snap = await _db.collection('startups').get();
 
-    return snap.docs.map((doc) {
+    return Future.wait(snap.docs.map((doc) async {
       final d = doc.data();
-      final balcao = d['balcao'] is Map
-          ? Map<String, dynamic>.from(d['balcao'] as Map)
-          : <String, dynamic>{};
-      final cfg = balcao['config'] is Map
-          ? Map<String, dynamic>.from(balcao['config'] as Map)
-          : <String, dynamic>{};
-      final st = balcao['state'] is Map
-          ? Map<String, dynamic>.from(balcao['state'] as Map)
-          : <String, dynamic>{};
+      final (cfg, st) = await _loadBalcao(doc.reference);
+
       final nome = (d['nome'] as String?) ?? doc.id;
       final siglaRaw = d['sigla'] as String?;
       final sigla = (siglaRaw != null && siglaRaw.isNotEmpty)
@@ -46,7 +40,33 @@ class BalcaoService {
         tokensEmitidos: (cfg['tokens_emitidos'] as num?)?.toInt() ?? 0,
         lastPrice: (st['last_price'] as num?)?.toDouble(),
       );
-    }).toList();
+    }));
+  }
+
+  // balcao é sub-coleção `startups/{id}/balcao/{config|state}`; fallback p/ mapa embutido legado.
+  Future<(Map<String, dynamic> cfg, Map<String, dynamic> st)> _loadBalcao(
+      DocumentReference docRef) async {
+    final col = docRef.collection('balcao');
+    final snaps = await Future.wait([col.doc('config').get(), col.doc('state').get()]);
+    final subCfg = snaps[0].data();
+    final subSt = snaps[1].data();
+    if (subCfg != null || subSt != null) {
+      return (
+        Map<String, dynamic>.from(subCfg ?? const {}),
+        Map<String, dynamic>.from(subSt ?? const {}),
+      );
+    }
+    final rootSnap = await docRef.get();
+    final root = rootSnap.data() is Map
+        ? Map<String, dynamic>.from(rootSnap.data() as Map)
+        : const <String, dynamic>{};
+    final balcao = root['balcao'] is Map
+        ? Map<String, dynamic>.from(root['balcao'] as Map)
+        : const <String, dynamic>{};
+    return (
+      balcao['config'] is Map ? Map<String, dynamic>.from(balcao['config'] as Map) : <String, dynamic>{},
+      balcao['state']  is Map ? Map<String, dynamic>.from(balcao['state']  as Map) : <String, dynamic>{},
+    );
   }
 
   // ── Streams ───────────────────────────────────────────────────────────────
@@ -126,8 +146,9 @@ class BalcaoService {
 
   Stream<Wallet> watchWallet() {
     final uid = _uid;
-    if (uid == null)
+    if (uid == null) {
       return Stream.value(Wallet(brl: 0, tokens: 0, tokensReserved: 0));
+    }
     return _db
         .collection('usuarios')
         .doc(uid)
@@ -138,9 +159,53 @@ class BalcaoService {
       final d = snap.data() ?? const <String, dynamic>{};
       return Wallet(
         brl: (d['saldo_brl'] as num?)?.toDouble() ?? 0,
+        brlReserved: (d['saldo_brl_reservado'] as num?)?.toDouble() ?? 0,
         tokens: 0,
-        tokensReserved: (d['saldo_brl_reservado'] as num?)?.toInt() ?? 0,
+        tokensReserved: 0,
       );
+    });
+  }
+
+  Stream<List<WalletHolding>> watchHoldings() {
+    final uid = _uid;
+    if (uid == null) return Stream.value(const []);
+
+    return _db
+        .collection('usuarios')
+        .doc(uid)
+        .collection('positions')
+        .snapshots()
+        .asyncMap((posSnap) async {
+      final holdings = <WalletHolding>[];
+      for (final posDoc in posSnap.docs) {
+        final data = posDoc.data();
+        final tokensLivres = (data['tokens_livres'] as num?)?.toInt() ?? 0;
+        final tokensReservados = (data['tokens_reservados'] as num?)?.toInt() ?? 0;
+        if (tokensLivres + tokensReservados <= 0) continue;
+
+        final startupRef = _db.collection('startups').doc(posDoc.id);
+        final startupSnap = await startupRef.get();
+        final sd = startupSnap.data() ?? {};
+
+        final (cfg, st) = await _loadBalcao(startupRef);
+        final lastPrice = (st['last_price'] as num?)?.toDouble() ?? 0;
+        final preco = lastPrice > 0
+            ? lastPrice
+            : (cfg['preco_emissao'] as num?)?.toDouble() ?? 0;
+
+        final totalTokens = tokensLivres + tokensReservados;
+        holdings.add(WalletHolding(
+          startupUid: posDoc.id,
+          startupNome: (sd['nome'] as String?) ?? posDoc.id,
+          startupSetor: (sd['setor'] as String?) ?? '',
+          quantidade: tokensLivres,
+          quantidadeReservada: tokensReservados,
+          precoMedio: preco,
+          valorInvestido: totalTokens * preco,
+        ));
+      }
+      holdings.sort((a, b) => b.valorInvestido.compareTo(a.valorInvestido));
+      return holdings;
     });
   }
 
@@ -319,6 +384,10 @@ class BalcaoService {
           return 'Saldo insuficiente para esta operação.';
         case 'INSUFFICIENT_TOKENS':
           return 'Tokens insuficientes em carteira.';
+        case 'INSUFFICIENT_LIQUIDITY':
+          final avail = m['available_qty'];
+          final req = m['requested_qty'];
+          return 'Liquidez insuficiente no book: só há $avail tokens à venda (você pediu $req).';
         case 'LOCKUP_QUANTITY_VIOLATION':
           final tipo = m['lockup_type'] as String?;
           if (tipo == 'percentual') {

@@ -135,7 +135,7 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
       quantidadeController.dispose();
       return;
     }
-    final saldoAtual = wallet.brl;
+    final saldoAtual = wallet.brlDisponivel;
 
     final confirmado = await showDialog<bool>(
       context: context,

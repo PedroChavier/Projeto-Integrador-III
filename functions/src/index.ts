@@ -106,6 +106,17 @@ export const registrarUsuario = functions
       { merge: true }
     );
 
+    // Garante wallet/main desde o signup. Idempotente: não sobrescreve saldo existente.
+    const walletRef = usuariosCollection.doc(userId).collection("wallet").doc("main");
+    const walletSnap = await walletRef.get();
+    if (!walletSnap.exists) {
+      await walletRef.set({
+        saldo_brl: 0,
+        saldo_brl_reservado: 0,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
     return {
       success: true,
       uid: userId,

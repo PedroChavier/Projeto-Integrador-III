@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -37,52 +35,9 @@ class _WalletScreenState extends State<WalletScreen> {
   void initState() {
     super.initState();
     _walletStream = _balcaoService.watchWallet();
-    _holdingsStream = _buildHoldingsStream();
+    _holdingsStream = _balcaoService.watchHoldings();
     _orderHistoryStream = _balcaoService.watchOrderHistory();
     _carregarHistorico();
-  }
-
-  Stream<List<WalletHolding>> _buildHoldingsStream() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return Stream.value(const []);
-
-    final db = FirebaseFirestore.instance;
-    return db
-        .collection('usuarios')
-        .doc(uid)
-        .collection('positions')
-        .snapshots()
-        .asyncMap((posSnap) async {
-      final holdings = <WalletHolding>[];
-      for (final posDoc in posSnap.docs) {
-        final tokensLivres =
-            (posDoc.data()['tokens_livres'] as num?)?.toInt() ?? 0;
-        if (tokensLivres <= 0) continue;
-        final startupSnap =
-            await db.collection('startups').doc(posDoc.id).get();
-        final sd = startupSnap.data() ?? {};
-        final preco = _resolvePreco(sd);
-        holdings.add(WalletHolding(
-          startupUid: posDoc.id,
-          startupNome: (sd['nome'] as String?) ?? posDoc.id,
-          startupSetor: (sd['setor'] as String?) ?? '',
-          quantidade: tokensLivres,
-          precoMedio: preco,
-          valorInvestido: tokensLivres * preco,
-        ));
-      }
-      holdings.sort((a, b) => b.valorInvestido.compareTo(a.valorInvestido));
-      return holdings;
-    });
-  }
-
-  double _resolvePreco(Map<String, dynamic> sd) {
-    final balcao = sd['balcao'] as Map<String, dynamic>? ?? {};
-    final cfg = balcao['config'] as Map<String, dynamic>? ?? {};
-    final st = balcao['state'] as Map<String, dynamic>? ?? {};
-    final lastPrice = (st['last_price'] as num?)?.toDouble() ?? 0;
-    if (lastPrice > 0) return lastPrice;
-    return (cfg['preco_emissao'] as num?)?.toDouble() ?? 0;
   }
 
   void _carregarHistorico() {
@@ -444,6 +399,9 @@ class _HoldingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nome = holding.startupNome.isNotEmpty
+        ? holding.startupNome
+        : holding.startupUid;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -457,49 +415,90 @@ class _HoldingCard extends StatelessWidget {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  holding.startupNome.isNotEmpty
-                      ? holding.startupNome
-                      : holding.startupUid,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nome,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (holding.startupSetor.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          holding.startupSetor,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black45),
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${holding.quantidadeTotal} token(s)',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A237E),
+                    ),
+                  ),
+                  if (holding.quantidadeReservada > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        '${holding.quantidadeReservada} em ordens',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFE65100),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
               Text(
-                '${holding.quantidade} token(s)',
+                'Valor captado',
+                style: const TextStyle(fontSize: 12, color: Colors.black45),
+              ),
+              Text(
+                currencyFormat.format(holding.valorInvestido),
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A237E),
+                  color: Colors.black87,
                 ),
               ),
             ],
           ),
-          if (holding.startupSetor.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              holding.startupSetor,
-              style: const TextStyle(fontSize: 12, color: Colors.black45),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Text(
-            'Investido: ${currencyFormat.format(holding.valorInvestido)}',
-            style: const TextStyle(
-              fontSize: 13,
-              color: Colors.black87,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
           const SizedBox(height: 4),
-          Text(
-            'Preço Médio: ${currencyFormat.format(holding.precoMedio)}',
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Preço atual',
+                style: const TextStyle(fontSize: 12, color: Colors.black45),
+              ),
+              Text(
+                currencyFormat.format(holding.precoMedio),
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ],
           ),
         ],
       ),
@@ -601,14 +600,27 @@ class _OrderHistoryCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  '${order.qtyOriginal} tkn · $priceText',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _formatOrderTotal(order),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      '${order.qtyOriginal} tokens · $priceText',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -616,6 +628,11 @@ class _OrderHistoryCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatOrderTotal(OrderHistoryEntry order) {
+    final total = order.qtyOriginal * order.price;
+    return currencyFormat.format(total);
   }
 
   String _statusLabel(String s) {

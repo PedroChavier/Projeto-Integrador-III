@@ -42,14 +42,18 @@ class Trade {
 
 class Wallet {
   double brl;
+  double brlReserved;
   int tokens;
   int tokensReserved;
 
   Wallet({
     required this.brl,
+    this.brlReserved = 0,
     required this.tokens,
     required this.tokensReserved,
   });
+
+  double get brlDisponivel => (brl - brlReserved).clamp(0, double.infinity);
 }
 
 class Startup {
@@ -139,13 +143,19 @@ class OrderbookState extends ChangeNotifier {
   }
 
   void updateWallet(Wallet w) {
-    wallet = w;
+    wallet = Wallet(
+      brl: w.brl,
+      brlReserved: w.brlReserved,
+      tokens: wallet.tokens,
+      tokensReserved: wallet.tokensReserved,
+    );
     notifyListeners();
   }
 
   void updatePosition(int tokensLivres, int tokensReservados) {
     wallet = Wallet(
       brl: wallet.brl,
+      brlReserved: wallet.brlReserved,
       tokens: tokensLivres,
       tokensReserved: tokensReservados,
     );
@@ -167,6 +177,8 @@ class OrderbookState extends ChangeNotifier {
     remoteTokensVendidos = 0;
     inputPrice = 0;
     inputQty = 0;
+    wallet.tokens = 0;
+    wallet.tokensReserved = 0;
     notifyListeners();
   }
 
