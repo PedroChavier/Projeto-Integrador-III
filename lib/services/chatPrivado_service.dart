@@ -29,6 +29,8 @@ class ChatPrivadoService {
     await _firestore.collection('perguntas').add(pergunta.toMap());
   }
 
+  
+
   Future<bool> isInvestidor({
     required String idStartup,
     required String idUsuario,
@@ -48,4 +50,6 @@ class ChatPrivadoService {
 
     return (livres + reservados) > 0;
   }
+
+  
 }

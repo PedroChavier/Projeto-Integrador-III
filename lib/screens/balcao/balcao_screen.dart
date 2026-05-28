@@ -249,18 +249,19 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   Widget build(BuildContext context) {
     if (_loadingStartups) {
       return Scaffold(
-        backgroundColor: const Color(0xFFFCFCF8),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
         body: SafeArea(
           child: Column(
             children: [
+              const SizedBox(height: 20),
               Container(
-                height: 3,
+                height: 2,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Color(0xFF173B7A),
-                      Color(0xFF2E7D32),
-                      Color(0xFFE53935)
+                      Color(0xFF6C63FF),
+                      Color(0xFFE040FB),
+                      Color(0xFFFF6B6B),
                     ],
                   ),
                 ),
@@ -283,18 +284,19 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         final isPositive = startup.variation >= 0;
 
         return Scaffold(
-          backgroundColor: const Color(0xFFFCFCF8),
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
           body: SafeArea(
             child: Column(
               children: [
+                const SizedBox(height: 20),
                 Container(
-                  height: 3,
+                  height: 2,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Color(0xFF173B7A),
-                        Color(0xFF2E7D32),
-                        Color(0xFFE53935)
+                        Color(0xFF6C63FF),
+                        Color(0xFFE040FB),
+                        Color(0xFFFF6B6B),
                       ],
                     ),
                   ),
@@ -348,16 +350,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _border),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFFFFF), Color(0xFFF4F6EE)],
-        ),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x12000000), blurRadius: 18, offset: Offset(0, 10)),
-        ],
+        border: Border.all(color: const Color.fromARGB(255, 227, 227, 227)),
+        
+        
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

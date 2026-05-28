@@ -7,7 +7,6 @@ import '../balcao/balcao_screen.dart';
 
 class DocumentosTab extends StatefulWidget {
   final Startup? startup;
-
   const DocumentosTab({super.key, this.startup});
 
   @override
@@ -16,7 +15,7 @@ class DocumentosTab extends StatefulWidget {
 
 class _DocumentosTabState extends State<DocumentosTab> {
   late final DocumentoService _service;
-  late Future<List<Documento>> _futureDocumentos;
+  late Future<_DocumentosData> _futureData;
 
   static const _tiposFixos = [
     {
@@ -35,9 +34,27 @@ class _DocumentosTabState extends State<DocumentosTab> {
   void initState() {
     super.initState();
     _service = DocumentoService();
-    _futureDocumentos = widget.startup?.uid != null
-        ? _service.getDocumentos(widget.startup!.uid!)
-        : Future.value([]);
+    _futureData = _carregarDados();
+  }
+
+  Future<_DocumentosData> _carregarDados() async {
+    final startupId = widget.startup?.uid;
+    if (startupId == null) {
+      return _DocumentosData(documentos: [], isInvestidor: false, docExclusivo: null);
+    }
+
+    // Busca em paralelo para melhor performance
+    final results = await Future.wait([
+      _service.getDocumentos(startupId),
+      _service.isInvestidor(startupId),
+      _service.getDocumentoExclusivo(startupId),
+    ]);
+
+    return _DocumentosData(
+      documentos: results[0] as List<Documento>,
+      isInvestidor: results[1] as bool,
+      docExclusivo: results[2] as Documento?,
+    );
   }
 
   Future<void> _baixarDocumento(String url) async {
@@ -56,16 +73,18 @@ class _DocumentosTabState extends State<DocumentosTab> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Documento>>(
-      future: _futureDocumentos,
+    return FutureBuilder<_DocumentosData>(
+      future: _futureData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final documentos = snapshot.data ?? [];
+        final data = snapshot.data ??
+            _DocumentosData(documentos: [], isInvestidor: false, docExclusivo: null);
+
         final mapaDocumentos = {
-          for (final doc in documentos) doc.tipo: doc,
+          for (final doc in data.documentos) doc.tipo: doc,
         };
 
         return SingleChildScrollView(
@@ -76,11 +95,7 @@ class _DocumentosTabState extends State<DocumentosTab> {
               // ── Documentos públicos ───────────────────────────
               const Text(
                 'Documentos públicos',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.black45,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(fontSize: 13, color: Colors.black45, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 12),
               ..._tiposFixos.map((fixo) {
@@ -101,29 +116,40 @@ class _DocumentosTabState extends State<DocumentosTab> {
 
               const SizedBox(height: 24),
 
-              // ── Documentos exclusivos (placeholder) ───────────
+              // ── Documentos exclusivos ─────────────────────────
               const Text(
                 'Documentos exclusivos para investidores',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.black45,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(fontSize: 13, color: Colors.black45, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 12),
+
               _DocumentoItem(
                 titulo: 'Relatório financeiro detalhado',
-                descricao: 'Disponível somente para investidores desta startup',
-                bloqueado: true,
-                disponivel: false,
-                linkText: 'Investir para desbloquear',
-                onDownload: null,
-                onLinkTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const BalcaoScreen(abaInicial: 0),
-                  ),
-                ),
+                descricao: data.isInvestidor
+                    ? 'Disponível para você como investidor desta startup'
+                    : 'Disponível somente para investidores desta startup',
+                bloqueado: !data.isInvestidor,
+                disponivel: data.isInvestidor &&
+                    data.docExclusivo != null &&
+                    data.docExclusivo!.url.isNotEmpty,
+                // Só mostra o link "Investir" se não for investidor
+                linkText: !data.isInvestidor ? 'Investir para desbloquear' : null,
+                // Se for investidor mas doc ainda não está no Firestore
+                indisponivel: data.isInvestidor &&
+                    (data.docExclusivo == null || data.docExclusivo!.url.isEmpty),
+                onDownload: data.isInvestidor &&
+                    data.docExclusivo != null &&
+                    data.docExclusivo!.url.isNotEmpty
+                    ? () => _baixarDocumento(data.docExclusivo!.url)
+                    : null,
+                onLinkTap: !data.isInvestidor
+                    ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const BalcaoScreen(abaInicial: 0),
+                          ),
+                        )
+                    : null,
               ),
             ],
           ),
@@ -133,11 +159,28 @@ class _DocumentosTabState extends State<DocumentosTab> {
   }
 }
 
+// ── Data class interna ────────────────────────────────────────────────────────
+
+class _DocumentosData {
+  final List<Documento> documentos;
+  final bool isInvestidor;
+  final Documento? docExclusivo;
+
+  _DocumentosData({
+    required this.documentos,
+    required this.isInvestidor,
+    required this.docExclusivo,
+  });
+}
+
+// ── Widget de item ────────────────────────────────────────────────────────────
+
 class _DocumentoItem extends StatelessWidget {
   final String titulo;
   final String descricao;
   final bool bloqueado;
   final bool disponivel;
+  final bool indisponivel; // investidor, mas doc ainda sem URL
   final String? linkText;
   final VoidCallback? onDownload;
   final VoidCallback? onLinkTap;
@@ -147,6 +190,7 @@ class _DocumentoItem extends StatelessWidget {
     required this.descricao,
     required this.bloqueado,
     required this.disponivel,
+    this.indisponivel = false,
     this.linkText,
     this.onDownload,
     this.onLinkTap,
@@ -185,21 +229,20 @@ class _DocumentoItem extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   descricao,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.black45,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(fontSize: 12, color: Colors.black45, height: 1.4),
                 ),
-                if (!bloqueado && !disponivel) ...[
+                if (!bloqueado && !disponivel && !indisponivel) ...[
                   const SizedBox(height: 6),
                   const Text(
                     'Documento não disponível',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black38,
-                      fontStyle: FontStyle.italic,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.black38, fontStyle: FontStyle.italic),
+                  ),
+                ],
+                if (indisponivel) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Documento em preparação pela startup',
+                    style: TextStyle(fontSize: 12, color: Colors.black38, fontStyle: FontStyle.italic),
                   ),
                 ],
                 if (linkText != null) ...[

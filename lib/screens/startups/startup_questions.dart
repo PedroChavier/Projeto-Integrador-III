@@ -27,6 +27,7 @@ class _PerguntasTabState extends State<PerguntasTab> {
   int? _respostaAberta;
   bool _enviando = false;
   bool _verificandoAcesso = false;
+  bool? _ehInvestidor;
 
   @override
   void initState() {
@@ -34,6 +35,18 @@ class _PerguntasTabState extends State<PerguntasTab> {
     _service = PerguntaService();
     _authService = AuthService();
     _chatPrivadoService = ChatPrivadoService();
+    _verificarSeInvestidor();
+  }
+
+  Future<void> _verificarSeInvestidor() async {
+    if (widget.startup == null) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final result = await _chatPrivadoService.isInvestidor(
+      idStartup: widget.startup!.uid ?? '',
+      idUsuario: user.uid,
+    );
+    if (mounted) setState(() => _ehInvestidor = result);
   }
 
   @override
@@ -273,7 +286,9 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: const Color(0xFFE8E8E8),
+                                    color: _ehInvestidor == true
+                                        ? const Color.fromARGB(255, 0, 14, 64)
+                                        : const Color(0xFFE8E8E8),
                                   ),
                                 ),
                                 child: Row(
@@ -283,8 +298,10 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                     Container(
                                       width: 46,
                                       height: 46,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFF3F5FF),
+                                      decoration: BoxDecoration(
+                                        color: _ehInvestidor == true
+                                        ? const Color(0xFF05054F)   // era 0xFF1A7A4A
+                                        : const Color.fromARGB(255, 0, 6, 93),
                                         shape: BoxShape.circle,
                                       ),
                                       child: _verificandoAcesso
@@ -297,21 +314,24 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                                 ),
                                               ),
                                             )
-                                          : const Icon(
-                                              Icons.lock_outline_rounded,
-                                              color: Color(0xFF05054F),
-                                              size: 24,
+                                          : Icon(
+                                              _ehInvestidor == true
+                                                  ? Icons.lock_open_rounded
+                                                  : Icons.lock_outline_rounded,
+                                              color: _ehInvestidor == true
+                                            ? const Color(0xFFF3F5FF)   // era 0xFFEAF5EE
+                                            : const Color(0xFFF3F5FF),
                                             ),
                                     ),
 
                                     const SizedBox(width: 12),
 
                                     // TEXTOS
-                                    const Expanded(
+                                    Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
+                                          const Text(
                                             'Chat privado',
                                             style: TextStyle(
                                               fontSize: 13,
@@ -319,8 +339,8 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                               color: Colors.black87,
                                             ),
                                           ),
-                                          SizedBox(height: 3),
-                                          Text(
+                                          const SizedBox(height: 3),
+                                          const Text(
                                             'Converse de forma privada com a startup',
                                             style: TextStyle(
                                               fontSize: 12,
@@ -328,12 +348,16 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                               height: 1.3,
                                             ),
                                           ),
-                                          SizedBox(height: 3),
+                                          const SizedBox(height: 3),
                                           Text(
-                                            'Invista para desbloquear esse canal',
+                                            _ehInvestidor == true
+                                                ? 'Você já é investidor — toque para entrar'
+                                                : 'Invista para desbloquear esse canal',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Color.fromARGB(255, 26, 0, 119),
+                                              color: _ehInvestidor == true
+                                              ? const Color(0xFF05054F)   // era 0xFF1A7A4A
+                                              : const Color(0xFF05054F),
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
