@@ -145,7 +145,6 @@ class AuthService {
     return factors.isNotEmpty;
   }
 
-
   Future<void> sendPasswordResetEmail({required String email}) {
     return _auth.sendPasswordResetEmail(email: email);
   }
@@ -300,7 +299,8 @@ class AuthService {
     }
 
     if (valor <= 0) {
-      throw ArgumentError.value(valor, 'valor', 'O valor deve ser maior que zero.');
+      throw ArgumentError.value(
+          valor, 'valor', 'O valor deve ser maior que zero.');
     }
 
     try {
@@ -367,6 +367,7 @@ class AuthService {
     transacoes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return transacoes;
   }
+
   Future<UserProfile> ensureCurrentUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) {

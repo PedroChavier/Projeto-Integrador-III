@@ -39,8 +39,10 @@ class Startup extends Empresa {
   String? _status;
   double _cptAportado = 0.0;
   double _precoToken = 0.0;
+  double _precoEmissao = 0.0;
   double _capitalMeta = 0.0;
   int _totalTokensEmitidos = 0;
+  int _tokensVendidos = 0;
   int _nmrInvestidores = 0;
   EstagioDesenvolvimento _estagioDesenvolvimento = EstagioDesenvolvimento.nova;
   String? _sumarioExecutivo;
@@ -49,6 +51,10 @@ class Startup extends Empresa {
   List<Socio> _socios = [];
   List<Membro> _membros = [];
   List<Membro> _mentores = [];
+  String? _lockupQuantidadeTipo;
+  double _lockupQuantidadeValor = 0.5;
+  int _lockupDiasMinimo = 30;
+  DateTime? _dataLancamento;
 
   Startup({
     String? uid,
@@ -58,11 +64,13 @@ class Startup extends Empresa {
     super.dataCriacao,
     String? descricao,
     int totalTokensEmitidos = 0,
+    int tokensVendidos = 0,
     String? estSocietaria,
     String? setor,
     String? status,
     double cptAportado = 0.0,
     double precoToken = 0.0,
+    double precoEmissao = 0.0,
     double capitalMeta = 0.0,
     int nmrInvestidores = 0,
     EstagioDesenvolvimento? estagioDesenvolvimento,
@@ -72,6 +80,10 @@ class Startup extends Empresa {
     List<Socio>? socios,
     List<Membro>? membros,
     List<Membro>? mentores,
+    String? lockupQuantidadeTipo,
+    double lockupQuantidadeValor = 0.5,
+    int lockupDiasMinimo = 30,
+    DateTime? dataLancamento,
   })  : _uid = uid,
         _sigla = sigla,
         _descricao = descricao,
@@ -80,8 +92,10 @@ class Startup extends Empresa {
         _status = status,
         _cptAportado = cptAportado,
         _precoToken = precoToken,
+        _precoEmissao = precoEmissao,
         _capitalMeta = capitalMeta,
         _totalTokensEmitidos = totalTokensEmitidos,
+        _tokensVendidos = tokensVendidos,
         _nmrInvestidores = nmrInvestidores,
         _estagioDesenvolvimento =
             estagioDesenvolvimento ?? EstagioDesenvolvimento.nova,
@@ -90,7 +104,11 @@ class Startup extends Empresa {
         _linksVideos = linksVideos ?? [],
         _socios = socios ?? [],
         _membros = membros ?? [],
-        _mentores = mentores ?? [];
+        _mentores = mentores ?? [],
+        _lockupQuantidadeTipo = lockupQuantidadeTipo,
+        _lockupQuantidadeValor = lockupQuantidadeValor,
+        _lockupDiasMinimo = lockupDiasMinimo,
+        _dataLancamento = dataLancamento;
 
   // ── Getters ───────────────────────────────────────────────────
   String? get uid => _uid;
@@ -101,8 +119,10 @@ class Startup extends Empresa {
   String? get status => _status;
   double get cptAportado => _cptAportado;
   double get precoToken => _precoToken;
+  double get precoEmissao => _precoEmissao;
   double get capitalMeta => _capitalMeta;
   int get totalTokensEmitidos => _totalTokensEmitidos;
+  int get tokensVendidos => _tokensVendidos;
   int get nmrInvestidores => _nmrInvestidores;
   EstagioDesenvolvimento get estagioDesenvolvimento => _estagioDesenvolvimento;
   String? get sumarioExecutivo => _sumarioExecutivo;
@@ -111,6 +131,10 @@ class Startup extends Empresa {
   List<Socio> get socios => _socios;
   List<Membro> get membros => _membros;
   List<Membro> get mentores => _mentores;
+  String? get lockupQuantidadeTipo => _lockupQuantidadeTipo;
+  double get lockupQuantidadeValor => _lockupQuantidadeValor;
+  int get lockupDiasMinimo => _lockupDiasMinimo;
+  DateTime? get dataLancamento => _dataLancamento;
 
   String _fallbackSigla() {
     final clean = (nome ?? '').replaceAll(' ', '');
@@ -173,6 +197,12 @@ class Startup extends Empresa {
       if (ts is Timestamp) createdAt = ts.toDate();
     } catch (_) {}
 
+    DateTime? dataLancamento;
+    try {
+      final ts = data['data_lancamento'] ?? data['dataLancamento'];
+      if (ts is Timestamp) dataLancamento = ts.toDate();
+    } catch (_) {}
+
     return Startup(
       uid: uid,
       sigla: str(data['sigla']),
@@ -181,8 +211,10 @@ class Startup extends Empresa {
       setor: str(data['setor']),
       status: str(data['status']),
       precoToken: toNum(data['precoToken'] ?? data['preco_token']).toDouble(),
+      precoEmissao: toNum(data['precoEmissao'] ?? data['preco_emissao']).toDouble(),
       totalTokensEmitidos:
           toNum(data['tokensEmitidos'] ?? data['totalTokensEmitidos']).toInt(),
+      tokensVendidos: toNum(data['tokensVendidos'] ?? data['tokens_vendidos_startup']).toInt(),
       nmrInvestidores: toNum(data['nmrInvestidores']).toInt(),
       cptAportado: toNum(data['cptAportado'] ?? data['capitalAportado']).toDouble(),
       capitalMeta: toNum(data['capitalMeta']).toDouble(),
@@ -194,6 +226,13 @@ class Startup extends Empresa {
       mentores: parseMembros(data['Mentores'] ?? data['mentores']),
       linksVideos: _parseStringList(data['linksVideos'] ?? data['LinksVideos']),
       membrosConselho: _parseStringList(data['membrosConselho'] ?? data['MembrosConselho']),
+      lockupQuantidadeTipo:
+          (str(data['lockupQuantidadeTipo'] ?? data['lockup_quantidade_tipo'])) ?? 'percentual',
+      lockupQuantidadeValor:
+          toNum(data['lockupQuantidadeValor'] ?? data['lockup_quantidade_valor'] ?? 0.5).toDouble(),
+      lockupDiasMinimo:
+          toNum(data['lockupDiasMinimo'] ?? data['lockup_dias_minimo'] ?? 30).toInt(),
+      dataLancamento: dataLancamento,
     );
   }
 

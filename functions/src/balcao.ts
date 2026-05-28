@@ -703,11 +703,19 @@ export const ordersCreate = functions
       const newTokensVendidos = txState.tokens_vendidos_startup + matchResult.startupTokensSoldDelta;
       const newLastPrice = matchResult.lastPrice ?? txState.last_price;
 
+      // Capital aportado: soma dos trades onde a startup foi vendedora
+      const capitalFromStartup = matchResult.trades
+        .filter(tr => tr.seller_type === "startup")
+        .reduce((sum, tr) => sum + Number((tr.price * tr.qty).toFixed(2)), 0);
+
       t.set(stateRef, {
         last_price: newLastPrice,
         tokens_vendidos_startup: newTokensVendidos,
         tokens_disponiveis_startup: Math.max(0, config.tokens_emitidos - newTokensVendidos),
         total_trades: admin.firestore.FieldValue.increment(matchResult.trades.length),
+        ...(capitalFromStartup > 0
+          ? { cptAportado: admin.firestore.FieldValue.increment(capitalFromStartup) }
+          : {}),
         updated_at: now,
       }, { merge: true });
     });
@@ -725,6 +733,26 @@ export const ordersCreate = functions
 
     // Update best_bid / best_ask after transaction (async, non-blocking for response)
     updateBestPrices(startupId).catch(() => undefined);
+
+    // Best-effort: increment nmrInvestidores for first-time buyers of startup tokens
+    const newStartupBuyers = [...new Set(
+      executedTrades
+        .filter(tr => tr.seller_type === "startup")
+        .map(tr => tr.buyer_id)
+    )];
+    if (newStartupBuyers.length > 0) {
+      Promise.all(newStartupBuyers.map(async (buyerId) => {
+        const purchasesSnap = await userPurchasesRef(buyerId, startupId).get();
+        const entries = (purchasesSnap.data()?.entries as unknown[]) ?? [];
+        if (entries.length === 1) {
+          // First purchase ever for this investor in this startup
+          await startupBalcaoRef(startupId).doc("state").set(
+            { nmrInvestidores: admin.firestore.FieldValue.increment(1) },
+            { merge: true }
+          );
+        }
+      })).catch(() => undefined);
+    }
 
     // Best-effort: clear investidor_ativo for investor sellers who sold all tokens
     const investorSellerIds = [...new Set(

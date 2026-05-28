@@ -80,6 +80,7 @@ class StartupService {
     // Mescla balcao/config|state em chaves raiz pra Startup.fromFirestore.
     if (balcao.config['preco_emissao'] != null) {
       data['precoToken'] = balcao.config['preco_emissao'];
+      data['precoEmissao'] = balcao.config['preco_emissao'];
     }
     if (balcao.config['tokens_emitidos'] != null) {
       data['totalTokensEmitidos'] = balcao.config['tokens_emitidos'];
@@ -87,11 +88,23 @@ class StartupService {
     if (balcao.config['capitalMeta'] != null) {
       data['capitalMeta'] = balcao.config['capitalMeta'];
     }
+    if (balcao.config['lockup_quantidade_tipo'] != null) {
+      data['lockupQuantidadeTipo'] = balcao.config['lockup_quantidade_tipo'];
+    }
+    if (balcao.config['lockup_quantidade_valor'] != null) {
+      data['lockupQuantidadeValor'] = balcao.config['lockup_quantidade_valor'];
+    }
+    if (balcao.config['lockup_dias_minimo'] != null) {
+      data['lockupDiasMinimo'] = balcao.config['lockup_dias_minimo'];
+    }
     if (balcao.state['cptAportado'] != null) {
       data['cptAportado'] = balcao.state['cptAportado'];
     }
     if (balcao.state['nmrInvestidores'] != null) {
       data['nmrInvestidores'] = balcao.state['nmrInvestidores'];
+    }
+    if (balcao.state['tokens_vendidos_startup'] != null) {
+      data['tokensVendidos'] = balcao.state['tokens_vendidos_startup'];
     }
 
     final lastPrice = _readNum(balcao.state['last_price']);

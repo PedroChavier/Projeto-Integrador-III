@@ -63,6 +63,10 @@ class Startup {
   final double precoEmissao;
   double? lastPrice;
   final int tokensEmitidos;
+  final String? lockupQuantidadeTipo; // 'percentual' | 'absoluto'
+  final double lockupQuantidadeValor; // decimal (0.5 = 50%) ou absoluto
+  final int lockupDiasMinimo;
+  final DateTime? dataLancamento;
 
   Startup({
     required this.id,
@@ -71,6 +75,10 @@ class Startup {
     required this.precoEmissao,
     this.lastPrice,
     required this.tokensEmitidos,
+    this.lockupQuantidadeTipo = 'percentual',
+    this.lockupQuantidadeValor = 0.5,
+    this.lockupDiasMinimo = 30,
+    this.dataLancamento,
   });
 
   double get displayPrice => lastPrice ?? precoEmissao;

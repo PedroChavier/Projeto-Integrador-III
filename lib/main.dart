@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:mescla_invest/screens/initial/splash_screen.dart';
 
 import 'firebase_options.dart';
+
 //import 'screens/home/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

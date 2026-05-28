@@ -39,6 +39,12 @@ class BalcaoService {
         precoEmissao: (cfg['preco_emissao'] as num?)?.toDouble() ?? 0,
         tokensEmitidos: (cfg['tokens_emitidos'] as num?)?.toInt() ?? 0,
         lastPrice: (st['last_price'] as num?)?.toDouble(),
+        lockupQuantidadeTipo:
+            (cfg['lockup_quantidade_tipo'] as String?) ?? 'percentual',
+        lockupQuantidadeValor:
+            (cfg['lockup_quantidade_valor'] as num?)?.toDouble() ?? 0.5,
+        lockupDiasMinimo: (cfg['lockup_dias_minimo'] as num?)?.toInt() ?? 30,
+        dataLancamento: (d['data_lancamento'] as Timestamp?)?.toDate(),
       );
     }));
   }
@@ -47,7 +53,8 @@ class BalcaoService {
   Future<(Map<String, dynamic> cfg, Map<String, dynamic> st)> _loadBalcao(
       DocumentReference docRef) async {
     final col = docRef.collection('balcao');
-    final snaps = await Future.wait([col.doc('config').get(), col.doc('state').get()]);
+    final snaps =
+        await Future.wait([col.doc('config').get(), col.doc('state').get()]);
     final subCfg = snaps[0].data();
     final subSt = snaps[1].data();
     if (subCfg != null || subSt != null) {
@@ -64,8 +71,12 @@ class BalcaoService {
         ? Map<String, dynamic>.from(root['balcao'] as Map)
         : const <String, dynamic>{};
     return (
-      balcao['config'] is Map ? Map<String, dynamic>.from(balcao['config'] as Map) : <String, dynamic>{},
-      balcao['state']  is Map ? Map<String, dynamic>.from(balcao['state']  as Map) : <String, dynamic>{},
+      balcao['config'] is Map
+          ? Map<String, dynamic>.from(balcao['config'] as Map)
+          : <String, dynamic>{},
+      balcao['state'] is Map
+          ? Map<String, dynamic>.from(balcao['state'] as Map)
+          : <String, dynamic>{},
     );
   }
 
@@ -180,7 +191,8 @@ class BalcaoService {
       for (final posDoc in posSnap.docs) {
         final data = posDoc.data();
         final tokensLivres = (data['tokens_livres'] as num?)?.toInt() ?? 0;
-        final tokensReservados = (data['tokens_reservados'] as num?)?.toInt() ?? 0;
+        final tokensReservados =
+            (data['tokens_reservados'] as num?)?.toInt() ?? 0;
         if (tokensLivres + tokensReservados <= 0) continue;
 
         final startupRef = _db.collection('startups').doc(posDoc.id);
@@ -198,7 +210,10 @@ class BalcaoService {
         final siglaRaw = sd['sigla'] as String?;
         final sigla = (siglaRaw != null && siglaRaw.isNotEmpty)
             ? siglaRaw
-            : nomeRaw.replaceAll(' ', '').substring(0, nomeRaw.replaceAll(' ', '').length.clamp(0, 4)).toUpperCase();
+            : nomeRaw
+                .replaceAll(' ', '')
+                .substring(0, nomeRaw.replaceAll(' ', '').length.clamp(0, 4))
+                .toUpperCase();
         holdings.add(WalletHolding(
           startupUid: posDoc.id,
           startupNome: nomeRaw,
@@ -241,7 +256,11 @@ class BalcaoService {
             final siglaRaw = sd['sigla'] as String?;
             startupSigla = (siglaRaw != null && siglaRaw.isNotEmpty)
                 ? siglaRaw
-                : startupNome.replaceAll(' ', '').substring(0, startupNome.replaceAll(' ', '').length.clamp(0, 4)).toUpperCase();
+                : startupNome
+                    .replaceAll(' ', '')
+                    .substring(
+                        0, startupNome.replaceAll(' ', '').length.clamp(0, 4))
+                    .toUpperCase();
             cache[startupId] = (nome: startupNome, sigla: startupSigla);
           } catch (_) {
             startupNome = startupId;
@@ -288,6 +307,29 @@ class BalcaoService {
         tokensLivres: (d['tokens_livres'] as num?)?.toInt() ?? 0,
         tokensReservados: (d['tokens_reservados'] as num?)?.toInt() ?? 0,
       );
+    });
+  }
+
+  Stream<List<({int qty, DateTime acquiredAt})>> watchTokenPurchases(
+      String startupId) {
+    final uid = _uid;
+    if (uid == null) return Stream.value(const []);
+    return _db
+        .collection('usuarios')
+        .doc(uid)
+        .collection('token_purchases')
+        .doc(startupId)
+        .snapshots()
+        .map((snap) {
+      if (!snap.exists) return <({int qty, DateTime acquiredAt})>[];
+      final entries = snap.data()?['entries'];
+      if (entries is! List) return <({int qty, DateTime acquiredAt})>[];
+      return entries.whereType<Map>().map((e) {
+        final qty = (e['qty'] as num?)?.toInt() ?? 0;
+        final ts = e['acquired_at'];
+        if (ts is! Timestamp || qty <= 0) return null;
+        return (qty: qty, acquiredAt: ts.toDate());
+      }).whereType<({int qty, DateTime acquiredAt})>().toList();
     });
   }
 

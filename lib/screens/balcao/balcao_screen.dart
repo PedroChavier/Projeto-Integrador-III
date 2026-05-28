@@ -52,6 +52,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   Map<String, int> _posicoes = const {};
   StreamSubscription<List<WalletHolding>>? _posicoesSub;
 
+  // Entradas de compra do investidor na startup atual (para lock-up de tempo)
+  List<({int qty, DateTime acquiredAt})> _purchaseEntries = [];
+
   // Stream subscriptions – cancelled on startup change and dispose
   StreamSubscription<(List<Order>, List<Order>)>? _ordersSub;
   StreamSubscription<List<Trade>>? _tradesSub;
@@ -59,6 +62,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       ({double? lastPrice, int tokensVendidos, int tokensEmitidos})>? _stateSub;
   StreamSubscription<Wallet>? _walletSub;
   StreamSubscription<({int tokensLivres, int tokensReservados})>? _positionSub;
+  StreamSubscription<List<({int qty, DateTime acquiredAt})>>? _purchasesSub;
 
   @override
   void initState() {
@@ -137,6 +141,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         _orderbookState.updateStartupState(s.lastPrice, s.tokensVendidos);
       }
     });
+
+    _purchaseEntries = [];
+    _purchasesSub = _service.watchTokenPurchases(startupId).listen((entries) {
+      if (mounted) setState(() => _purchaseEntries = entries);
+    });
   }
 
   void _cancelSubscriptions() {
@@ -145,11 +154,13 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     _stateSub?.cancel();
     _walletSub?.cancel();
     _positionSub?.cancel();
+    _purchasesSub?.cancel();
     _ordersSub = null;
     _tradesSub = null;
     _stateSub = null;
     _walletSub = null;
     _positionSub = null;
+    _purchasesSub = null;
   }
 
   void _changeStartup(int index) {
@@ -191,6 +202,38 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   String _stateText(Startup s) =>
       s.lastPrice == null ? 'Preço de emissão' : 'Mercado ativo';
+
+  // Retorna true quando qualquer lock-up impede a venda.
+  // Ambos devem estar desbloqueados simultaneamente para vender.
+  bool _isSellLocked(OrderbookState state, Startup startup) {
+    // Lock-up por valor (global)
+    bool valorUnlocked = true;
+    if (startup.lockupQuantidadeTipo != null && startup.lockupQuantidadeValor > 0) {
+      final vendidos = state.startupTokensVendidos;
+      final int required = startup.lockupQuantidadeTipo == 'percentual'
+          ? (startup.lockupQuantidadeValor * startup.tokensEmitidos).ceil()
+          : startup.lockupQuantidadeValor.toInt();
+      valorUnlocked = vendidos >= required;
+    }
+
+    // Lock-up por tempo: verifica datas reais de compra do investidor,
+    // igual ao que o backend faz em validateLockupTempo.
+    bool tempoUnlocked = true;
+    if (startup.lockupDiasMinimo > 0) {
+      if (_purchaseEntries.isEmpty) {
+        tempoUnlocked = false;
+      } else {
+        final lockupMs = startup.lockupDiasMinimo * Duration.millisecondsPerDay;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final available = _purchaseEntries
+            .where((e) => now >= e.acquiredAt.millisecondsSinceEpoch + lockupMs)
+            .fold(0, (sum, e) => sum + e.qty);
+        tempoUnlocked = available > 0;
+      }
+    }
+
+    return !(valorUnlocked && tempoUnlocked);
+  }
 
   @override
   void dispose() {
@@ -414,6 +457,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               valueColor: const AlwaysStoppedAnimation<Color>(_accent),
             ),
           ),
+          ..._buildLockupInfo(state, startup),
         ],
       ),
     );
@@ -443,6 +487,187 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  List<Widget> _buildLockupInfo(OrderbookState state, Startup startup) {
+    final hasQtd = startup.lockupQuantidadeTipo != null &&
+        startup.lockupQuantidadeValor > 0;
+    final hasTempo = startup.lockupDiasMinimo > 0;
+
+    if (!hasQtd && !hasTempo) return [];
+
+    final widgets = <Widget>[
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          const Icon(Icons.lock_outline, size: 13, color: _muted),
+          const SizedBox(width: 4),
+          const Text(
+            'Lock-up',
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: _muted),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+    ];
+
+    if (hasQtd) {
+      final vendidos = state.startupTokensVendidos;
+      final int required;
+      final String metaLabel;
+      if (startup.lockupQuantidadeTipo == 'percentual') {
+        required =
+            (startup.lockupQuantidadeValor * startup.tokensEmitidos).ceil();
+        final pct = (startup.lockupQuantidadeValor * 100).toStringAsFixed(0);
+        metaLabel = 'meta: $pct% dos tokens emitidos';
+      } else {
+        required = startup.lockupQuantidadeValor.toInt();
+        metaLabel =
+            'meta: ${state.formatQty(required)} ${startup.sigla} vendidos';
+      }
+      final percorrido = vendidos.clamp(0, required);
+      final falta = (required - percorrido).clamp(0, required);
+      final progress =
+          required > 0 ? (percorrido / required).clamp(0.0, 1.0) : 1.0;
+      final unlocked = falta == 0;
+
+      widgets.add(_buildLockupCard(
+        icon: Icons.bar_chart_rounded,
+        title: 'Por valor',
+        subtitle: metaLabel,
+        progress: progress,
+        unlocked: unlocked,
+        percorridoLabel: '${state.formatQty(percorrido)} ${startup.sigla} vendidos',
+        faltaLabel: unlocked
+            ? 'Desbloqueado'
+            : 'Faltam ${state.formatQty(falta)} ${startup.sigla}',
+      ));
+    }
+
+    if (hasTempo) {
+      final lancamento = startup.dataLancamento;
+      final totalDias = startup.lockupDiasMinimo;
+      double? tempoProgress;
+      bool tempoUnlocked = false;
+      String percorridoTempoLabel;
+      String faltaTempoLabel;
+
+      if (lancamento != null) {
+        final diasDecorridos =
+            DateTime.now().difference(lancamento).inDays.clamp(0, totalDias);
+        final diasFaltando = totalDias - diasDecorridos;
+        tempoProgress = (diasDecorridos / totalDias).clamp(0.0, 1.0);
+        tempoUnlocked = diasFaltando == 0;
+        percorridoTempoLabel = '$diasDecorridos de $totalDias dias decorridos';
+        faltaTempoLabel =
+            tempoUnlocked ? 'Desbloqueado' : 'Faltam $diasFaltando dias';
+      } else {
+        percorridoTempoLabel = 'carência de $totalDias dias por compra';
+        faltaTempoLabel = 'data de lançamento não definida';
+      }
+
+      widgets.add(_buildLockupCard(
+        icon: Icons.schedule_rounded,
+        title: 'Por tempo',
+        subtitle: 'desde o lançamento da startup',
+        progress: tempoProgress,
+        unlocked: tempoUnlocked,
+        percorridoLabel: percorridoTempoLabel,
+        faltaLabel: faltaTempoLabel,
+      ));
+    }
+
+    return widgets;
+  }
+
+  Widget _buildLockupCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required double? progress,
+    required bool unlocked,
+    required String percorridoLabel,
+    required String faltaLabel,
+  }) {
+    final accent =
+        unlocked ? const Color(0xFF2E7D32) : const Color(0xFFB8860B);
+    final bg =
+        unlocked ? const Color(0xFFF0F7F3) : const Color(0xFFFFF8E1);
+    final borderColor =
+        unlocked ? const Color(0xFFA5D6A7) : const Color(0xFFFFE082);
+    final barColor =
+        unlocked ? const Color(0xFF2E7D32) : const Color(0xFFFFB300);
+    final textStrong =
+        unlocked ? const Color(0xFF1B5E20) : const Color(0xFF7B5800);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: accent),
+              const SizedBox(width: 5),
+              Text(
+                title,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: accent),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  subtitle,
+                  style: TextStyle(
+                      fontSize: 10, color: accent.withValues(alpha: 0.75)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: borderColor,
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  percorridoLabel,
+                  style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.8)),
+                ),
+              ),
+              Text(
+                faltaLabel,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: textStrong),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1162,6 +1387,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   Widget _buildActionPanel(OrderbookState state, Startup startup) {
     final isBuy = state.currentTab == 'buy';
     final isMarket = state.orderType == 'market';
+    final isSellLocked = !isBuy && _isSellLocked(state, startup);
     final actionColor = isBuy ? _buyColor : _sellColor;
     final actionSoft = isBuy ? _buySoft : _sellSoft;
     final ticker = _ticker(startup);
@@ -1608,13 +1834,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             child: ElevatedButton(
               onPressed: (_submitting ||
                       isOverBudget ||
+                      isSellLocked ||
                       state.currentStartup.id.isEmpty)
                   ? null
                   : () => _handleSubmitOrder(state, isBuy),
               style: ElevatedButton.styleFrom(
                 backgroundColor: actionColor,
                 foregroundColor: Colors.white,
-                disabledBackgroundColor: isOverBudget
+                disabledBackgroundColor: (isOverBudget || isSellLocked)
                     ? _sellColor.withOpacity(0.3)
                     : actionColor.withOpacity(0.4),
                 elevation: 0,
@@ -1631,7 +1858,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   : Text(
                       isOverBudget
                           ? 'Saldo insuficiente'
-                          : (isBuy ? 'Comprar tokens' : 'Vender tokens'),
+                          : (isSellLocked
+                              ? 'Venda bloqueada — lock-up ativo'
+                              : (isBuy ? 'Comprar tokens' : 'Vender tokens')),
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w800),
                     ),

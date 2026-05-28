@@ -31,6 +31,10 @@ class _WalletScreenState extends State<WalletScreen> {
   );
   final DateFormat _dateFormat = DateFormat('dd MMM HH:mm', 'pt_BR');
 
+  bool _holdingsExpanded = true;
+  bool _ordersExpanded = false;
+  bool _transacoesExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -232,22 +236,27 @@ class _WalletScreenState extends State<WalletScreen> {
                           ),
                           const SizedBox(height: 28),
                           if (holdings.isNotEmpty) ...[
-                            const Text(
-                              'Tokens na Carteira',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black45,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ...holdings.map(
-                              (holding) => Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _HoldingCard(
-                                  holding: holding,
-                                  currencyFormat: _currencyFormat,
-                                ),
+                            _CollapsibleSection(
+                              title: 'Tokens na Carteira',
+                              count: holdings.length,
+                              collapsedSummary:
+                                  _holdingsSummary(holdings),
+                              expanded: _holdingsExpanded,
+                              onToggle: () => setState(() =>
+                                  _holdingsExpanded = !_holdingsExpanded),
+                              child: Column(
+                                children: holdings
+                                    .map(
+                                      (holding) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: _HoldingCard(
+                                          holding: holding,
+                                          currencyFormat: _currencyFormat,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -257,28 +266,33 @@ class _WalletScreenState extends State<WalletScreen> {
                             builder: (context, orderSnap) {
                               final orders =
                                   orderSnap.data ?? const <OrderHistoryEntry>[];
-                              if (orders.isEmpty)
+                              if (orders.isEmpty) {
                                 return const SizedBox.shrink();
+                              }
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Histórico de Ordens',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black45,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ...orders.map(
-                                    (order) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: _OrderHistoryCard(
-                                        order: order,
-                                        currencyFormat: _currencyFormat,
-                                        dateFormat: _dateFormat,
-                                      ),
+                                  _CollapsibleSection(
+                                    title: 'Histórico de Ordens',
+                                    count: orders.length,
+                                    collapsedSummary: _ordersSummary(orders),
+                                    expanded: _ordersExpanded,
+                                    onToggle: () => setState(() =>
+                                        _ordersExpanded = !_ordersExpanded),
+                                    child: Column(
+                                      children: orders
+                                          .map(
+                                            (order) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 8),
+                                              child: _OrderHistoryCard(
+                                                order: order,
+                                                currencyFormat: _currencyFormat,
+                                                dateFormat: _dateFormat,
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
                                     ),
                                   ),
                                   const SizedBox(height: 16),
@@ -286,21 +300,20 @@ class _WalletScreenState extends State<WalletScreen> {
                               );
                             },
                           ),
-                          const Text(
-                            'Histórico de Transações',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black45,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
                           FutureBuilder<List<WalletTransaction>>(
                             future: _transacoesFuture,
                             builder: (context, transacoesSnapshot) {
-                              if (transacoesSnapshot.hasError) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 12),
+                              final hasError = transacoesSnapshot.hasError;
+                              final isLoading = transacoesSnapshot
+                                      .connectionState ==
+                                  ConnectionState.waiting;
+                              final transacoes = transacoesSnapshot.data ??
+                                  const <WalletTransaction>[];
+
+                              Widget body;
+                              if (hasError) {
+                                body = Padding(
+                                  padding: const EdgeInsets.only(top: 4),
                                   child: Text(
                                     'Nao foi possivel carregar o historico: ${transacoesSnapshot.error}',
                                     style: const TextStyle(
@@ -309,24 +322,16 @@ class _WalletScreenState extends State<WalletScreen> {
                                     ),
                                   ),
                                 );
-                              }
-
-                              if (transacoesSnapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Padding(
-                                  padding: EdgeInsets.only(top: 16),
+                              } else if (isLoading) {
+                                body = const Padding(
+                                  padding: EdgeInsets.only(top: 8),
                                   child: Center(
                                     child: CircularProgressIndicator(),
                                   ),
                                 );
-                              }
-
-                              final transacoes = transacoesSnapshot.data ??
-                                  const <WalletTransaction>[];
-
-                              if (transacoes.isEmpty) {
-                                return const Padding(
-                                  padding: EdgeInsets.only(top: 12),
+                              } else if (transacoes.isEmpty) {
+                                body = const Padding(
+                                  padding: EdgeInsets.only(top: 4),
                                   child: Text(
                                     'Nenhuma movimentacao registrada ainda.',
                                     style: TextStyle(
@@ -335,35 +340,46 @@ class _WalletScreenState extends State<WalletScreen> {
                                     ),
                                   ),
                                 );
+                              } else {
+                                body = Column(
+                                  children: [
+                                    ...transacoes.map(
+                                      (transacao) => Column(
+                                        children: [
+                                          const Divider(
+                                              height: 1,
+                                              color: Color(0xFFEEEEEE)),
+                                          _TransacaoItem(
+                                            titulo: transacao.titulo,
+                                            subtitulo: transacao.subtitulo,
+                                            valor: _formatValorTransacao(
+                                              transacao.valor,
+                                              transacao.positivo,
+                                            ),
+                                            positivo: transacao.positivo,
+                                            direcaoLabel: transacao.positivo
+                                                ? 'Entrada de capital'
+                                                : 'Saida de capital',
+                                            fonte: transacao.fonte,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Divider(
+                                        height: 1, color: Color(0xFFEEEEEE)),
+                                  ],
+                                );
                               }
 
-                              return Column(
-                                children: [
-                                  ...transacoes.map(
-                                    (transacao) => Column(
-                                      children: [
-                                        const Divider(
-                                            height: 1,
-                                            color: Color(0xFFEEEEEE)),
-                                        _TransacaoItem(
-                                          titulo: transacao.titulo,
-                                          subtitulo: transacao.subtitulo,
-                                          valor: _formatValorTransacao(
-                                            transacao.valor,
-                                            transacao.positivo,
-                                          ),
-                                          positivo: transacao.positivo,
-                                          direcaoLabel: transacao.positivo
-                                              ? 'Entrada de capital'
-                                              : 'Saida de capital',
-                                          fonte: transacao.fonte,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const Divider(
-                                      height: 1, color: Color(0xFFEEEEEE)),
-                                ],
+                              return _CollapsibleSection(
+                                title: 'Histórico de Transações',
+                                count: transacoes.length,
+                                collapsedSummary:
+                                    _transacoesSummary(transacoes),
+                                expanded: _transacoesExpanded,
+                                onToggle: () => setState(() =>
+                                    _transacoesExpanded = !_transacoesExpanded),
+                                child: body,
                               );
                             },
                           ),
@@ -385,6 +401,170 @@ class _WalletScreenState extends State<WalletScreen> {
   String _formatValorTransacao(double valor, bool positivo) {
     final prefixo = positivo ? '+ ' : '- ';
     return '$prefixo${_currencyFormat.format(valor)}';
+  }
+
+  String _holdingsSummary(List<WalletHolding> holdings) {
+    final total = holdings.fold<double>(
+      0,
+      (sum, h) => sum + h.valorInvestido,
+    );
+    return 'Total captado · ${_currencyFormat.format(total)}';
+  }
+
+  String _ordersSummary(List<OrderHistoryEntry> orders) {
+    var abertas = 0;
+    var executadas = 0;
+    for (final o in orders) {
+      if (o.status == 'aberta' || o.status == 'parcialmente_executada') {
+        abertas++;
+      } else if (o.status == 'executada') {
+        executadas++;
+      }
+    }
+    final parts = <String>[];
+    if (abertas > 0) parts.add('$abertas em aberto');
+    if (executadas > 0) parts.add('$executadas executadas');
+    if (parts.isEmpty) {
+      return '${orders.length} ${orders.length == 1 ? 'ordem' : 'ordens'}';
+    }
+    return parts.join(' · ');
+  }
+
+  String _transacoesSummary(List<WalletTransaction> txs) {
+    if (txs.isEmpty) return 'Sem movimentações';
+    var net = 0.0;
+    for (final t in txs) {
+      net += t.positivo ? t.valor : -t.valor;
+    }
+    final sign = net >= 0 ? '+' : '−';
+    return 'Saldo líquido · $sign${_currencyFormat.format(net.abs())}';
+  }
+}
+
+class _CollapsibleSection extends StatelessWidget {
+  const _CollapsibleSection({
+    required this.title,
+    required this.count,
+    required this.expanded,
+    required this.onToggle,
+    required this.child,
+    this.collapsedSummary,
+  });
+
+  final String title;
+  final int count;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final Widget child;
+  final String? collapsedSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ),
+                  if (count > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF6C63FF),
+                            Color(0xFFE040FB),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: Container(
+                      width: 26,
+                      height: 26,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F2F7),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 18,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          firstChild: SizedBox(
+            width: double.infinity,
+            child: collapsedSummary == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(top: 2, bottom: 4),
+                    child: Text(
+                      collapsedSummary!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black38,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+          ),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: SizedBox(width: double.infinity, child: child),
+          ),
+          crossFadeState: expanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 260),
+          sizeCurve: Curves.easeOutCubic,
+          firstCurve: Curves.easeOut,
+          secondCurve: Curves.easeIn,
+        ),
+      ],
+    );
   }
 }
 
