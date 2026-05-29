@@ -374,50 +374,48 @@ async function verificarCodigoMfa({ uid, codigo, canal, }) {
     // Normaliza e valida os dados recebidos.
     const normalizedUid = sanitizeRequiredString(uid, "UID");
     const normalizedCode = sanitizeMfaCode(codigo);
-    // Recupera o codigo MFA armazenado para o usuario.
-    const mfaSnapshot = await mfaCodesCollection.doc(normalizedUid).get();
-    if (!mfaSnapshot.exists) {
-        throw new functions.https.HttpsError("not-found", "Nenhum codigo MFA foi solicitado para este usuario.");
-    }
-    const mfaData = mfaSnapshot.data();
-    const storedHash = mfaData?.codeHash;
-    const expiresAt = mfaData?.expiresAt;
-    const attempts = mfaData?.attempts ?? 0;
-    const verifiedAt = mfaData?.verifiedAt;
-    const canalArmazenado = mfaData?.canal;
-    // Valida se o documento possui dados necessarios.
-    if (!expiresAt || typeof storedHash !== "string") {
-        throw new functions.https.HttpsError("failed-precondition", "O codigo MFA armazenado esta invalido.");
-    }
-    // Valida se o codigo ja foi utilizado.
-    if (verifiedAt) {
-        throw new functions.https.HttpsError("failed-precondition", "Este codigo MFA ja foi utilizado.");
-    }
-    // Valida se o codigo expirou.
-    if (expiresAt.toDate().getTime() < Date.now()) {
-        throw new functions.https.HttpsError("deadline-exceeded", "O codigo MFA informado expirou. Solicite um novo envio.");
-    }
-    // Valida se o canal corresponde.
-    if (canalArmazenado !== canal) {
-        throw new functions.https.HttpsError("invalid-argument", "O canal MFA fornecido nao corresponde ao codigo solicitado.");
-    }
-    // Valida se nao excedeu limite de tentativas.
-    if (attempts >= mfaMaxAttempts) {
-        throw new functions.https.HttpsError("permission-denied", "Limite de tentativas excedido. Solicite um novo codigo.");
-    }
-    // Valida se o codigo fornecido corresponde ao hash armazenado.
+    const mfaRef = mfaCodesCollection.doc(normalizedUid);
     const providedHash = hashMfaCode(normalizedUid, normalizedCode);
-    if (storedHash !== providedHash) {
-        await mfaCodesCollection.doc(normalizedUid).set({
-            attempts: admin.firestore.FieldValue.increment(1),
+    // Toda a verificacao + marcacao acontece numa unica transacao para evitar reuso
+    // entre validacao e gravacao.
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(mfaRef);
+        if (!snap.exists) {
+            throw new functions.https.HttpsError("not-found", "Nenhum codigo MFA foi solicitado para este usuario.");
+        }
+        const mfaData = snap.data();
+        const storedHash = mfaData?.codeHash;
+        const expiresAt = mfaData?.expiresAt;
+        const attempts = mfaData?.attempts ?? 0;
+        const verifiedAt = mfaData?.verifiedAt;
+        const canalArmazenado = mfaData?.canal;
+        if (!expiresAt || typeof storedHash !== "string") {
+            throw new functions.https.HttpsError("failed-precondition", "O codigo MFA armazenado esta invalido.");
+        }
+        if (verifiedAt) {
+            throw new functions.https.HttpsError("failed-precondition", "Este codigo MFA ja foi utilizado.");
+        }
+        if (expiresAt.toDate().getTime() < Date.now()) {
+            throw new functions.https.HttpsError("deadline-exceeded", "O codigo MFA informado expirou. Solicite um novo envio.");
+        }
+        if (canalArmazenado !== canal) {
+            throw new functions.https.HttpsError("invalid-argument", "O canal MFA fornecido nao corresponde ao codigo solicitado.");
+        }
+        if (attempts >= mfaMaxAttempts) {
+            throw new functions.https.HttpsError("permission-denied", "Limite de tentativas excedido. Solicite um novo codigo.");
+        }
+        if (storedHash !== providedHash) {
+            tx.set(mfaRef, {
+                attempts: admin.firestore.FieldValue.increment(1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+            throw new functions.https.HttpsError("permission-denied", "O codigo MFA informado esta incorreto.");
+        }
+        // Marca como verificado atomicamente.
+        tx.set(mfaRef, {
+            verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        throw new functions.https.HttpsError("permission-denied", "O codigo MFA informado esta incorreto.");
-    }
-    // Marca o codigo como verificado.
-    await mfaCodesCollection.doc(normalizedUid).set({
-        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    });
     return true;
 }

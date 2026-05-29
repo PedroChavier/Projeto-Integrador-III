@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listarStartups = exports.creditarSaldoSimulado = exports.verificarCodigoMfaCallable = exports.solicitarCodigoMfa = exports.redefinirSenhaComCodigo = exports.solicitarCodigoRecuperacaoSenha = exports.excluirPerfilAoExcluirAuth = exports.registrarUsuario = void 0;
+exports.listarStartups = exports.atualizarMfaStatus = exports.creditarSaldoSimulado = exports.verificarCodigoMfaCallable = exports.solicitarCodigoMfa = exports.redefinirSenhaComCodigo = exports.solicitarCodigoRecuperacaoSenha = exports.excluirPerfilAoExcluirAuth = exports.registrarUsuario = void 0;
 const node_crypto_1 = require("node:crypto");
 const net = __importStar(require("node:net"));
 const tls = __importStar(require("node:tls"));
@@ -45,6 +45,7 @@ const functions = __importStar(require("firebase-functions/v1"));
 const mfa_code_1 = require("./mfa_code");
 __exportStar(require("./mfa_code"), exports);
 __exportStar(require("./balcao"), exports);
+const rate_limit_1 = require("./rate_limit");
 // Inicializa o SDK do Firebase Admin (requisito para acesso ao Auth/Firestore).
 admin.initializeApp();
 const db = admin.firestore();
@@ -109,6 +110,12 @@ exports.solicitarCodigoRecuperacaoSenha = functions
     .region('southamerica-east1')
     .https.onCall(async (data) => {
     const email = sanitizeEmail(data.email);
+    await (0, rate_limit_1.enforceRateLimit)({
+        key: email,
+        action: "solicitarCodigoRecuperacaoSenha",
+        maxPerWindow: 5,
+        windowSeconds: 600,
+    });
     const response = {
         success: true,
         message: "Se existir uma conta com este e-mail, um codigo de recuperacao foi enviado.",
@@ -199,6 +206,12 @@ exports.solicitarCodigoMfa = functions
     if (!uid) {
         throw new functions.https.HttpsError("unauthenticated", "Usuario nao autenticado.");
     }
+    await (0, rate_limit_1.enforceRateLimit)({
+        key: uid,
+        action: "solicitarCodigoMfa",
+        maxPerWindow: 5,
+        windowSeconds: 600,
+    });
     const canal = sanitizeMfaChannel(data.canal);
     const usuarioSnapshot = await usuariosCollection.doc(uid).get();
     const usuarioData = usuarioSnapshot.data();
@@ -275,28 +288,68 @@ exports.creditarSaldoSimulado = functions
         throw new functions.https.HttpsError("unauthenticated", "Usuario nao autenticado.");
     }
     const valor = sanitizePositiveNumber(data.valor, "Valor");
+    const VALOR_MAX_POR_DEPOSITO = 100000;
+    const VALOR_MAX_DIARIO = 500000;
+    if (valor > VALOR_MAX_POR_DEPOSITO) {
+        throw new functions.https.HttpsError("invalid-argument", `Valor maximo por deposito: R$ ${VALOR_MAX_POR_DEPOSITO}.`);
+    }
     const usuarioRef = usuariosCollection.doc(uid);
     const transacaoRef = usuarioRef.collection("transacoes").doc();
     const walletMainRef = usuarioRef.collection("wallet").doc("main");
-    const batch = db.batch();
-    batch.set(walletMainRef, {
-        saldo_brl: admin.firestore.FieldValue.increment(valor),
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    batch.set(transacaoRef, {
-        tipo: "deposito",
-        titulo: "Credito Simulado",
-        subtitulo: formatTransactionDate(new Date()),
-        valor,
-        positivo: true,
-        fonte: "Externo",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const dailyLimitRef = usuarioRef.collection("deposit_limits").doc(todayKey);
+    await db.runTransaction(async (tx) => {
+        const limitSnap = await tx.get(dailyLimitRef);
+        const totalHoje = limitSnap.data()?.total ?? 0;
+        if (totalHoje + valor > VALOR_MAX_DIARIO) {
+            throw new functions.https.HttpsError("resource-exhausted", `Limite diario de R$ ${VALOR_MAX_DIARIO} excedido. Ja depositado hoje: R$ ${totalHoje}.`);
+        }
+        tx.set(walletMainRef, {
+            saldo_brl: admin.firestore.FieldValue.increment(valor),
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        tx.set(transacaoRef, {
+            tipo: "deposito",
+            titulo: "Credito Simulado",
+            subtitulo: formatTransactionDate(new Date()),
+            valor,
+            positivo: true,
+            fonte: "Externo",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        tx.set(dailyLimitRef, {
+            total: admin.firestore.FieldValue.increment(valor),
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
     });
-    await batch.commit();
     return {
         success: true,
         valor,
     };
+});
+// Funcao Callable: atualiza o flag mfaHabilitado no perfil do usuario.
+// Cliente nao pode escrever esse campo diretamente (protegido pelas rules).
+exports.atualizarMfaStatus = functions
+    .region("southamerica-east1")
+    .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+        throw new functions.https.HttpsError("unauthenticated", "Usuario nao autenticado.");
+    }
+    if (typeof data.habilitado !== "boolean") {
+        throw new functions.https.HttpsError("invalid-argument", "habilitado deve ser boolean.");
+    }
+    await (0, rate_limit_1.enforceRateLimit)({
+        key: uid,
+        action: "atualizarMfaStatus",
+        maxPerWindow: 5,
+        windowSeconds: 600,
+    });
+    await usuariosCollection.doc(uid).set({
+        mfaHabilitado: data.habilitado,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { success: true, habilitado: data.habilitado };
 });
 // Normaliza a etapa/estágio (strings/nums diversos) para um conjunto reduzido de valores canônicos.
 function normalizeStage(raw) {

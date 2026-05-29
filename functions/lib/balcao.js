@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.inicializarOrdemEmissao = exports.getTrades = exports.getOrderbook = exports.ordersCancel = exports.ordersCreate = void 0;
 const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions/v1"));
+const rate_limit_1 = require("./rate_limit");
 const db = admin.firestore();
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function throwHttp(code, msg) {
@@ -73,6 +74,16 @@ function userPurchasesRef(uid, startupId) {
 }
 function userOrderHistoryRef(uid, orderId) {
     return db.collection("usuarios").doc(uid).collection("order_history").doc(orderId);
+}
+function userAuditLogRef(uid) {
+    return db.collection("usuarios").doc(uid).collection("audit_log").doc();
+}
+// Anexa entrada de auditoria de mutacao de saldo dentro de uma transacao.
+function writeAuditLog(t, uid, entry, now) {
+    t.set(userAuditLogRef(uid), {
+        ...entry,
+        created_at: now,
+    });
 }
 // ─── DB Reads (with embedded-map fallback) ───────────────────────────────────
 async function readConfig(startupId) {
@@ -166,8 +177,7 @@ function validateLockupQuantidade(config, state) {
         }
     }
 }
-async function validateLockupTempo(uid, startupId, qtyRequested, lockupDias) {
-    const snap = await userPurchasesRef(uid, startupId).get();
+function validateLockupTempoFromSnap(snap, qtyRequested, lockupDias) {
     if (!snap.exists) {
         throwHttp("failed-precondition", JSON.stringify({
             code: "LOCKUP_TIME_VIOLATION",
@@ -210,6 +220,10 @@ async function validateLockupTempo(uid, startupId, qtyRequested, lockupDias) {
             requested_qty: qtyRequested,
         }));
     }
+}
+async function validateLockupTempo(uid, startupId, qtyRequested, lockupDias) {
+    const snap = await userPurchasesRef(uid, startupId).get();
+    validateLockupTempoFromSnap(snap, qtyRequested, lockupDias);
 }
 function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
     // Sort: bids descending by price (market bids first), asks ascending by price (market asks first)
@@ -328,6 +342,7 @@ exports.ordersCreate = functions
     const uid = context.auth?.uid;
     if (!uid)
         throwHttp("unauthenticated", "Usuário não autenticado.");
+    await (0, rate_limit_1.enforceRateLimit)({ key: uid, action: "ordersCreate", maxPerWindow: 30, windowSeconds: 60 });
     const startupId = requireString(data.startup_id, "startup_id");
     const side = requireString(data.side, "side");
     const orderType = requireString(data.order_type, "order_type");
@@ -465,7 +480,7 @@ exports.ordersCreate = functions
         // ── ALL READS FIRST (Firestore tx invariant) ──
         const { state: txState, stateRef } = await readStateInTx(t, startupId);
         const ordersRef = startupOrdersRef(startupId);
-        const [txWalletSnap, txPositionSnap, bidsSnap, asksSnap] = await Promise.all([
+        const reads = [
             t.get(userWalletRef(uid)),
             t.get(userPositionRef(uid, startupId)),
             t.get(ordersRef
@@ -474,7 +489,18 @@ exports.ordersCreate = functions
             t.get(ordersRef
                 .where("status", "in", ["aberta", "parcialmente_executada"])
                 .where("side", "==", "sell")),
-        ]);
+        ];
+        if (side === "sell") {
+            reads.push(t.get(userPurchasesRef(uid, startupId)));
+        }
+        const readResults = await Promise.all(reads);
+        const txWalletSnap = readResults[0];
+        const txPositionSnap = readResults[1];
+        const bidsSnap = readResults[2];
+        const asksSnap = readResults[3];
+        const txPurchasesSnap = side === "sell"
+            ? readResults[4]
+            : null;
         const txWallet = (txWalletSnap.data() ?? {});
         const txPosition = (txPositionSnap.data() ?? {});
         const txSaldoDisponivel = (txWallet.saldo_brl ?? 0) - (txWallet.saldo_brl_reservado ?? 0);
@@ -484,6 +510,20 @@ exports.ordersCreate = functions
         }
         if (side === "sell" && orderType === "limit" && txTokensLivres < qty) {
             throwHttp("failed-precondition", JSON.stringify({ code: "INSUFFICIENT_TOKENS" }));
+        }
+        // Market sell: mesma checagem de tokens livres dentro da TX para evitar
+        // que duas market sells concorrentes debitem mais do que existe em livres.
+        if (side === "sell" && orderType === "market" && txTokensLivres < qty) {
+            throwHttp("failed-precondition", JSON.stringify({
+                code: "INSUFFICIENT_TOKENS",
+                tokens_livres: txTokensLivres,
+                requested_qty: qty,
+            }));
+        }
+        // Revalidate lockup inside the transaction (state and purchases re-read)
+        if (side === "sell") {
+            validateLockupQuantidade(config, txState);
+            validateLockupTempoFromSnap(txPurchasesSnap, qty, config.lockup_dias_minimo);
         }
         // Build in-memory orderbook with the new order included (no DB write yet)
         const newOrderForMatching = { id: newOrderRef.id, ...newOrderData };
@@ -495,9 +535,34 @@ exports.ordersCreate = functions
             rawAsks.push(newOrderForMatching);
         const matchResult = runMatchingEngine(startupId, txState, rawBids, rawAsks);
         executedTrades = matchResult.trades;
+        // Market orders devem ser totalmente preenchidos. Se a liquidez no momento
+        // da TX nao for suficiente (ja consumida por outras ordens concorrentes),
+        // abortamos para evitar fill parcial silencioso.
+        if (orderType === "market") {
+            const filledQty = matchResult.trades
+                .filter(tr => (side === "buy" ? tr.buy_order_id : tr.sell_order_id) === newOrderRef.id)
+                .reduce((sum, tr) => sum + tr.qty, 0);
+            if (filledQty < qty) {
+                throwHttp("failed-precondition", JSON.stringify({
+                    code: "INSUFFICIENT_LIQUIDITY_AT_EXECUTION",
+                    requested_qty: qty,
+                    filled_qty: filledQty,
+                }));
+            }
+        }
         // ── ALL WRITES AFTER READS ──
         // Insert the new order
         t.set(newOrderRef, newOrderData);
+        // Write order history atomically with order creation
+        t.set(userOrderHistoryRef(uid, newOrderRef.id), {
+            startup_id: startupId,
+            side,
+            order_type: orderType,
+            price: orderType === "limit" ? limitPrice : config.preco_emissao,
+            qty_original: qty,
+            status_changes: [{ status: "aberta", at: now }],
+            created_at: now,
+        });
         // Reserve balance for limit orders
         if (orderType === "limit") {
             if (side === "buy") {
@@ -505,6 +570,12 @@ exports.ordersCreate = functions
                     saldo_brl_reservado: admin.firestore.FieldValue.increment(estimatedCost),
                     updated_at: now,
                 }, { merge: true });
+                writeAuditLog(t, uid, {
+                    motivo: "reserva_limit_buy",
+                    delta_brl_reservado: estimatedCost,
+                    startup_id: startupId,
+                    order_id: newOrderRef.id,
+                }, now);
             }
             else {
                 t.set(userPositionRef(uid, startupId), {
@@ -512,6 +583,13 @@ exports.ordersCreate = functions
                     tokens_livres: admin.firestore.FieldValue.increment(-qty),
                     updated_at: now,
                 }, { merge: true });
+                writeAuditLog(t, uid, {
+                    motivo: "reserva_limit_sell",
+                    delta_tokens_reservados: qty,
+                    delta_tokens_livres: -qty,
+                    startup_id: startupId,
+                    order_id: newOrderRef.id,
+                }, now);
             }
         }
         // Write trades
@@ -531,6 +609,15 @@ exports.ordersCreate = functions
                 investidor_ativo: true,
                 updated_at: now,
             }, { merge: true });
+            writeAuditLog(t, trade.buyer_id, {
+                motivo: "trade_buy",
+                delta_brl: -tradeCost,
+                delta_brl_reservado: trade.buyer_order_type === "limit" ? -tradeCost : 0,
+                delta_tokens_livres: trade.qty,
+                startup_id: startupId,
+                order_id: trade.buy_order_id,
+                trade_id: trade.id,
+            }, now);
             t.set(userPurchasesRef(trade.buyer_id, startupId), {
                 qty_total: admin.firestore.FieldValue.increment(trade.qty),
                 entries: admin.firestore.FieldValue.arrayUnion({
@@ -560,6 +647,28 @@ exports.ordersCreate = functions
                         updated_at: now,
                     }, { merge: true });
                 }
+                writeAuditLog(t, trade.seller_id, {
+                    motivo: "trade_sell",
+                    delta_brl: tradeCost,
+                    delta_tokens_reservados: trade.seller_order_type === "limit" ? -trade.qty : 0,
+                    delta_tokens_livres: trade.seller_order_type === "limit" ? 0 : -trade.qty,
+                    startup_id: startupId,
+                    order_id: trade.sell_order_id,
+                    trade_id: trade.id,
+                }, now);
+            }
+            else if (trade.seller_type === "startup") {
+                // Receita primaria: capital captado pela startup. Registro per-trade
+                // num audit log dedicado a startup (espelha a captacao em balcao/state.cptAportado).
+                t.set(db.collection("startups").doc(startupId).collection("revenue_log").doc(trade.id), {
+                    trade_id: trade.id,
+                    qty: trade.qty,
+                    price: trade.price,
+                    total_brl: tradeCost,
+                    buyer_id: trade.buyer_id,
+                    buyer_order_id: trade.buy_order_id,
+                    created_at: now,
+                });
             }
         }
         // Update matched order statuses (use set+merge so it composes with the
@@ -574,26 +683,37 @@ exports.ordersCreate = functions
         // Use matchResult data: after matching, compute new best prices from updated orders
         const newTokensVendidos = txState.tokens_vendidos_startup + matchResult.startupTokensSoldDelta;
         const newLastPrice = matchResult.lastPrice ?? txState.last_price;
+        // Capital aportado: soma dos trades onde a startup foi vendedora
+        const capitalFromStartup = matchResult.trades
+            .filter(tr => tr.seller_type === "startup")
+            .reduce((sum, tr) => sum + Number((tr.price * tr.qty).toFixed(2)), 0);
         t.set(stateRef, {
             last_price: newLastPrice,
             tokens_vendidos_startup: newTokensVendidos,
             tokens_disponiveis_startup: Math.max(0, config.tokens_emitidos - newTokensVendidos),
             total_trades: admin.firestore.FieldValue.increment(matchResult.trades.length),
+            ...(capitalFromStartup > 0
+                ? { cptAportado: admin.firestore.FieldValue.increment(capitalFromStartup) }
+                : {}),
             updated_at: now,
         }, { merge: true });
     });
-    // Write order history (outside tx, best-effort)
-    await userOrderHistoryRef(uid, newOrderRef.id).set({
-        startup_id: startupId,
-        side,
-        order_type: orderType,
-        price: orderType === "limit" ? limitPrice : config.preco_emissao,
-        qty_original: qty,
-        status_changes: [{ status: "aberta", at: now }],
-        created_at: now,
-    });
     // Update best_bid / best_ask after transaction (async, non-blocking for response)
-    updateBestPrices(startupId).catch(() => undefined);
+    updateBestPrices(startupId).catch((e) => functions.logger.error("updateBestPrices failed", { startupId, error: String(e) }));
+    // Best-effort: increment nmrInvestidores for first-time buyers of startup tokens
+    const newStartupBuyers = [...new Set(executedTrades
+            .filter(tr => tr.seller_type === "startup")
+            .map(tr => tr.buyer_id))];
+    if (newStartupBuyers.length > 0) {
+        Promise.all(newStartupBuyers.map(async (buyerId) => {
+            const purchasesSnap = await userPurchasesRef(buyerId, startupId).get();
+            const entries = purchasesSnap.data()?.entries ?? [];
+            if (entries.length === 1) {
+                // First purchase ever for this investor in this startup
+                await startupBalcaoRef(startupId).doc("state").set({ nmrInvestidores: admin.firestore.FieldValue.increment(1) }, { merge: true });
+            }
+        })).catch(() => undefined);
+    }
     // Best-effort: clear investidor_ativo for investor sellers who sold all tokens
     const investorSellerIds = [...new Set(executedTrades.filter(tr => tr.seller_type === "investor").map(tr => tr.seller_id))];
     if (investorSellerIds.length > 0) {
@@ -612,6 +732,7 @@ exports.ordersCancel = functions
     const uid = context.auth?.uid;
     if (!uid)
         throwHttp("unauthenticated", "Usuário não autenticado.");
+    await (0, rate_limit_1.enforceRateLimit)({ key: uid, action: "ordersCancel", maxPerWindow: 30, windowSeconds: 60 });
     const startupId = requireString(data.startup_id, "startup_id");
     const orderId = requireString(data.order_id, "order_id");
     const orderRef = startupOrdersRef(startupId).doc(orderId);
@@ -637,6 +758,12 @@ exports.ordersCancel = functions
                 saldo_brl_reservado: admin.firestore.FieldValue.increment(-refund),
                 updated_at: now,
             }, { merge: true });
+            writeAuditLog(t, uid, {
+                motivo: "cancel_limit_buy_refund",
+                delta_brl_reservado: -refund,
+                startup_id: startupId,
+                order_id: orderId,
+            }, now);
         }
         if (order.side === "sell" && order.order_type === "limit") {
             t.set(userPositionRef(uid, startupId), {
@@ -644,12 +771,19 @@ exports.ordersCancel = functions
                 tokens_livres: admin.firestore.FieldValue.increment(order.qty_restante),
                 updated_at: now,
             }, { merge: true });
+            writeAuditLog(t, uid, {
+                motivo: "cancel_limit_sell_release",
+                delta_tokens_reservados: -order.qty_restante,
+                delta_tokens_livres: order.qty_restante,
+                startup_id: startupId,
+                order_id: orderId,
+            }, now);
         }
+        t.set(userOrderHistoryRef(uid, orderId), {
+            status_changes: admin.firestore.FieldValue.arrayUnion({ status: "cancelada", at: now }),
+        }, { merge: true });
     });
-    await userOrderHistoryRef(uid, orderId).set({
-        status_changes: admin.firestore.FieldValue.arrayUnion({ status: "cancelada", at: now }),
-    }, { merge: true });
-    updateBestPrices(startupId).catch(() => undefined);
+    updateBestPrices(startupId).catch((e) => functions.logger.error("updateBestPrices failed", { startupId, error: String(e) }));
     return { success: true };
 });
 exports.getOrderbook = functions
@@ -768,7 +902,7 @@ exports.inicializarOrdemEmissao = functions
         });
     }
     else {
-        updateBestPrices(startupId).catch(() => undefined);
+        updateBestPrices(startupId).catch((e) => functions.logger.error("updateBestPrices failed", { startupId, error: String(e) }));
     }
     return { success: true, order_id: orderRef.id };
 });

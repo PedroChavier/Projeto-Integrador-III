@@ -17,7 +17,7 @@ class WalletTransaction {
   final String subtitulo;
   final double valor;
   final bool positivo;
-  final DateTime createdAt;
+  final DateTime? createdAt;
   final String tipo;
   final String fonte;
 
@@ -25,7 +25,7 @@ class WalletTransaction {
     final rawCreatedAt = map['createdAt'];
     final createdAt = rawCreatedAt is Timestamp
         ? rawCreatedAt.toDate()
-        : DateTime.tryParse(rawCreatedAt?.toString() ?? '') ?? DateTime.now();
+        : DateTime.tryParse(rawCreatedAt?.toString() ?? '');
 
     return WalletTransaction(
       id: id,

@@ -22,7 +22,7 @@ service cloud.firestore {
       // pelo backend não inclui role/isAdmin (perfis legados ou criados via
       // Admin SDK na Cloud Function de registro).
       return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['uid', 'cpf', 'email', 'role', 'isAdmin', 'createdAt']);
+        .hasAny(['uid', 'cpf', 'email', 'role', 'isAdmin', 'createdAt', 'mfaHabilitado']);
     }
 
     match /startups/{startupId} {
@@ -30,6 +30,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Order book e trades sao publicos por design (price discovery).
+    // CUIDADO: documentos em /startups/{}/orders/{} contem user_id.
+    // Para anonimato, use a callable getOrderbook (faz strip do user_id).
     match /startups/{startupId}/{document=**} {
       allow read: if signedIn();
       allow write: if false;
@@ -51,8 +54,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /orders/{orderId} {
-      allow read: if signedIn();
+    match /usuarios/{userId}/audit_log/{entryId} {
+      allow read: if isOwner(userId);
       allow write: if false;
     }
 
@@ -73,10 +76,6 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.idAutor == request.auth.uid;
       allow update, delete: if false;
-    }
-
-    match /2fa_settings/{userId} {
-      allow read, write: if isOwner(userId);
     }
 
     match /{document=**} {

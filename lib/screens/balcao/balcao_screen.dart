@@ -1292,7 +1292,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                               color: _accent,
                               fontWeight: FontWeight.w600),
                         )
-                      else if (order.isPartial)
+                      else if (order.isPartiallyExecuted)
                         const Text('parcial',
                             style: TextStyle(fontSize: 9, color: _muted)),
                     ],
@@ -1402,10 +1402,10 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     final brlDisponivel = state.wallet.brlDisponivel;
     final balanceUsageFraction = isBuy
         ? (estimatedTotal != null && brlDisponivel > 0
-            ? (estimatedTotal / brlDisponivel).clamp(0.0, 1.0)
+            ? estimatedTotal / brlDisponivel
             : 0.0)
         : (state.inputQty > 0 && state.wallet.tokens > 0
-            ? (state.inputQty / state.wallet.tokens).clamp(0.0, 1.0)
+            ? state.inputQty / state.wallet.tokens
             : 0.0);
     final isOverBudget = isBuy
         ? (estimatedTotal != null && estimatedTotal > brlDisponivel)
@@ -1542,7 +1542,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   color: actionColor,
                   onTap: () {
                     setState(() => _marketQuickMode = 'balance');
-                    _applyQuickFill(_quickSliderPct.round(), state, isBuy);
+                    _applyQuickFill(_quickSliderPct, state, isBuy);
                   },
                 ),
                 _buildQuickModeButton(
@@ -1551,7 +1551,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   color: actionColor,
                   onTap: () {
                     setState(() => _marketQuickMode = 'tokens');
-                    _applyQuickFill(_quickSliderPct.round(), state, isBuy);
+                    _applyQuickFill(_quickSliderPct, state, isBuy);
                   },
                 ),
               ],
@@ -1735,8 +1735,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                             divisions: 99,
                             onChanged: (value) {
                               setState(() => _quickSliderPct = value);
-                              _applyQuickFill(
-                                  _quickSliderPct.round(), state, isBuy);
+                              _applyQuickFill(_quickSliderPct, state, isBuy);
                             },
                           ),
                         ),
@@ -1818,6 +1817,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   highlight: estimatedTotal != null && estimatedTotal > 0,
                   alertColor: isOverBudget,
                 ),
+                if (isMarket && estimatedTotal != null && estimatedTotal > 0)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      '* Valor estimado com base no livro atual. O preço final pode variar.',
+                      style: TextStyle(fontSize: 9, color: _muted, height: 1.4),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1896,6 +1903,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     final barColor = isOver ? _sellColor : (isBuy ? _buyColor : _sellColor);
     final pctText =
         '${(fraction * 100).toStringAsFixed(0)}% do ${isBuy ? 'saldo' : 'portfólio'}';
+    final overflowPct = ((fraction - 1.0) * 100).toStringAsFixed(0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1931,6 +1939,24 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
           ),
         ),
+        if (isOver) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.arrow_upward_rounded,
+                  size: 10, color: _sellColor),
+              const SizedBox(width: 3),
+              Text(
+                '+$overflowPct% além do ${isBuy ? 'saldo disponível' : 'portfólio disponível'}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: _sellColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -1938,7 +1964,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   Widget _buildQuickFillButton(
       String label, int pct, OrderbookState state, bool isBuy) {
     return GestureDetector(
-      onTap: () => _applyQuickFill(pct, state, isBuy),
+      onTap: () => _applyQuickFill(pct.toDouble(), state, isBuy),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
@@ -1955,7 +1981,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  void _applyQuickFill(int pct, OrderbookState state, bool isBuy) {
+  void _applyQuickFill(double pct, OrderbookState state, bool isBuy) {
     int qty;
     final brlDisponivel = state.wallet.brlDisponivel;
     if (state.orderType == 'market') {
@@ -1979,7 +2005,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
     _qtyController.text = qty > 0 ? qty.toString() : '';
     setState(() {
-      _quickSliderPct = pct.toDouble();
+      _quickSliderPct = pct;
       state.inputQty = qty;
     });
   }
@@ -2078,7 +2104,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
             const SizedBox(width: 4),
             Text(
-              '${_quickSliderPct.round()}%',
+              _quickSliderPct % 1 == 0
+                  ? '${_quickSliderPct.round()}%'
+                  : '${_quickSliderPct.toStringAsFixed(2).replaceAll('.', ',')}%',
               style: TextStyle(
                 fontSize: 11,
                 color: _showQuickSlider ? color : _ink,
@@ -2236,7 +2264,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   // ── TRADE HISTORY ──────────────────────────────────────────────────────────
 
   Widget _buildTradeHistory(OrderbookState state) {
-    final trades = state.trades.reversed.toList();
+    final trades = state.trades;
 
     return Container(
       decoration: BoxDecoration(
@@ -2503,7 +2531,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   void _showPercentInputDialog(
       OrderbookState state, bool isBuy, Color actionColor) {
-    String buffer = _quickSliderPct.round().toString();
+    // buffer stores percentage × 100 (fixed-point 2 decimals)
+    // e.g. 12,61% → 1261; right-to-left calculator entry
+    int buffer = (_quickSliderPct * 100).round();
     bool replaceOnNext = true;
 
     showDialog(
@@ -2512,37 +2542,35 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
-            final parsed = int.tryParse(buffer) ?? 0;
-            final overLimit = parsed > 100;
+            final whole = buffer ~/ 100;
+            final frac = (buffer % 100).toString().padLeft(2, '0');
+            final displayStr = '$whole,$frac';
+            final overLimit = buffer > 10000; // > 100,00%
             final displayColor = overLimit ? _sellColor : _ink;
 
             void press(String key) {
               setLocal(() {
                 if (key == 'C') {
-                  buffer = '0';
+                  buffer = 0;
                   replaceOnNext = true;
                 } else if (key == '<') {
-                  if (buffer.length <= 1) {
-                    buffer = '0';
-                    replaceOnNext = true;
-                  } else {
-                    buffer = buffer.substring(0, buffer.length - 1);
-                  }
+                  buffer = buffer ~/ 10;
                 } else {
-                  if (replaceOnNext || buffer == '0') {
-                    buffer = key;
+                  final digit = int.parse(key);
+                  if (replaceOnNext) {
+                    buffer = digit;
                     replaceOnNext = false;
-                  } else if (buffer.length < 3) {
-                    buffer = buffer + key;
+                  } else if (buffer < 100000) {
+                    buffer = buffer * 10 + digit;
                   }
                 }
               });
             }
 
             void apply() {
-              final raw = int.tryParse(buffer) ?? _quickSliderPct.round();
-              final clamped = raw.clamp(1, 100);
-              setState(() => _quickSliderPct = clamped.toDouble());
+              final raw = buffer / 100.0;
+              final clamped = raw.clamp(0.01, 100.0);
+              setState(() => _quickSliderPct = clamped);
               _applyQuickFill(clamped, state, isBuy);
               Navigator.pop(ctx);
             }
@@ -2581,7 +2609,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Valor entre 1 e 100.',
+                      'Valor entre 0,01 e 100,00.',
                       style:
                           TextStyle(fontSize: 11, color: _muted, height: 1.4),
                     ),
@@ -2595,7 +2623,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color:
-                              overLimit ? _sellColor.withOpacity(0.6) : _border,
+                              overLimit ? _sellColor.withValues(alpha: 0.6) : _border,
                         ),
                       ),
                       child: Row(
@@ -2604,7 +2632,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            buffer,
+                            displayStr,
                             style: TextStyle(
                               fontSize: 40,
                               fontWeight: FontWeight.w800,
@@ -2655,7 +2683,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: parsed <= 0 ? null : apply,
+                        onPressed: (buffer == 0 || overLimit) ? null : apply,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: actionColor,
                           foregroundColor: Colors.white,

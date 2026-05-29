@@ -23,7 +23,7 @@ class Order {
     this.status = 'aberta',
   });
 
-  bool get isPartial => qtyOriginal > qty && qty > 0;
+  bool get isPartiallyExecuted => qtyOriginal > qty && qty > 0;
 }
 
 class Trade {
@@ -150,6 +150,7 @@ class OrderbookState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // BRL comes from the wallet stream; tokens come separately via updatePosition.
   void updateWallet(Wallet w) {
     wallet = Wallet(
       brl: w.brl,

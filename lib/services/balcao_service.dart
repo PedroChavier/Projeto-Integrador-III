@@ -187,19 +187,39 @@ class BalcaoService {
         .collection('positions')
         .snapshots()
         .asyncMap((posSnap) async {
+      final validPositions = posSnap.docs.where((doc) {
+        final d = doc.data();
+        final livres = (d['tokens_livres'] as num?)?.toInt() ?? 0;
+        final reservados = (d['tokens_reservados'] as num?)?.toInt() ?? 0;
+        return livres + reservados > 0;
+      }).toList();
+
+      if (validPositions.isEmpty) return const <WalletHolding>[];
+
+      final startupRefs = validPositions
+          .map((p) => _db.collection('startups').doc(p.id))
+          .toList();
+
+      final results = await Future.wait([
+        ...startupRefs.map((r) => r.get()),
+        ...startupRefs.map(_loadBalcao),
+      ]);
+      final startupSnaps = results.take(startupRefs.length).cast<DocumentSnapshot>().toList();
+      final balcaoData = results
+          .skip(startupRefs.length)
+          .cast<(Map<String, dynamic>, Map<String, dynamic>)>()
+          .toList();
+
       final holdings = <WalletHolding>[];
-      for (final posDoc in posSnap.docs) {
+      for (var i = 0; i < validPositions.length; i++) {
+        final posDoc = validPositions[i];
         final data = posDoc.data();
         final tokensLivres = (data['tokens_livres'] as num?)?.toInt() ?? 0;
         final tokensReservados =
             (data['tokens_reservados'] as num?)?.toInt() ?? 0;
-        if (tokensLivres + tokensReservados <= 0) continue;
 
-        final startupRef = _db.collection('startups').doc(posDoc.id);
-        final startupSnap = await startupRef.get();
-        final sd = startupSnap.data() ?? {};
-
-        final (cfg, st) = await _loadBalcao(startupRef);
+        final sd = startupSnaps[i].data() as Map<String, dynamic>? ?? {};
+        final (cfg, st) = balcaoData[i];
         final lastPrice = (st['last_price'] as num?)?.toDouble() ?? 0;
         final preco = lastPrice > 0
             ? lastPrice

@@ -13,6 +13,7 @@ import {
 } from "./mfa_code";
 export * from "./mfa_code";
 export * from "./balcao";
+import { enforceRateLimit } from "./rate_limit";
 
 // Inicializa o SDK do Firebase Admin (requisito para acesso ao Auth/Firestore).
 admin.initializeApp();
@@ -139,6 +140,14 @@ export const solicitarCodigoRecuperacaoSenha = functions
   .https.onCall(
   async (data: SolicitarCodigoRecuperacaoPayload) => {
     const email = sanitizeEmail(data.email);
+
+    await enforceRateLimit({
+      key: email,
+      action: "solicitarCodigoRecuperacaoSenha",
+      maxPerWindow: 5,
+      windowSeconds: 600,
+    });
+
     const response = {
       success: true,
       message:
@@ -283,6 +292,13 @@ export const solicitarCodigoMfa = functions
       );
     }
 
+    await enforceRateLimit({
+      key: uid,
+      action: "solicitarCodigoMfa",
+      maxPerWindow: 5,
+      windowSeconds: 600,
+    });
+
     const canal = sanitizeMfaChannel(data.canal);
     const usuarioSnapshot = await usuariosCollection.doc(uid).get();
     const usuarioData = usuarioSnapshot.data();
@@ -399,37 +415,103 @@ export const creditarSaldoSimulado = functions
     }
 
     const valor = sanitizePositiveNumber(data.valor, "Valor");
+
+    const VALOR_MAX_POR_DEPOSITO = 100_000;
+    const VALOR_MAX_DIARIO = 500_000;
+
+    if (valor > VALOR_MAX_POR_DEPOSITO) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        `Valor maximo por deposito: R$ ${VALOR_MAX_POR_DEPOSITO}.`
+      );
+    }
+
     const usuarioRef = usuariosCollection.doc(uid);
     const transacaoRef = usuarioRef.collection("transacoes").doc();
     const walletMainRef = usuarioRef.collection("wallet").doc("main");
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const dailyLimitRef = usuarioRef.collection("deposit_limits").doc(todayKey);
 
-    const batch = db.batch();
+    await db.runTransaction(async (tx) => {
+      const limitSnap = await tx.get(dailyLimitRef);
+      const totalHoje = (limitSnap.data()?.total as number | undefined) ?? 0;
+      if (totalHoje + valor > VALOR_MAX_DIARIO) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          `Limite diario de R$ ${VALOR_MAX_DIARIO} excedido. Ja depositado hoje: R$ ${totalHoje}.`
+        );
+      }
 
-    batch.set(
-      walletMainRef,
-      {
-        saldo_brl: admin.firestore.FieldValue.increment(valor),
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+      tx.set(
+        walletMainRef,
+        {
+          saldo_brl: admin.firestore.FieldValue.increment(valor),
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-    batch.set(transacaoRef, {
-      tipo: "deposito",
-      titulo: "Credito Simulado",
-      subtitulo: formatTransactionDate(new Date()),
-      valor,
-      positivo: true,
-      fonte: "Externo",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      tx.set(transacaoRef, {
+        tipo: "deposito",
+        titulo: "Credito Simulado",
+        subtitulo: formatTransactionDate(new Date()),
+        valor,
+        positivo: true,
+        fonte: "Externo",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      tx.set(
+        dailyLimitRef,
+        {
+          total: admin.firestore.FieldValue.increment(valor),
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
     });
-
-    await batch.commit();
 
     return {
       success: true,
       valor,
     };
+  });
+
+// Funcao Callable: atualiza o flag mfaHabilitado no perfil do usuario.
+// Cliente nao pode escrever esse campo diretamente (protegido pelas rules).
+export const atualizarMfaStatus = functions
+  .region("southamerica-east1")
+  .https.onCall(async (data: { habilitado?: unknown }, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Usuario nao autenticado."
+      );
+    }
+    if (typeof data.habilitado !== "boolean") {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "habilitado deve ser boolean."
+      );
+    }
+
+    await enforceRateLimit({
+      key: uid,
+      action: "atualizarMfaStatus",
+      maxPerWindow: 5,
+      windowSeconds: 600,
+    });
+
+    await usuariosCollection.doc(uid).set(
+      {
+        mfaHabilitado: data.habilitado,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return { success: true, habilitado: data.habilitado };
   });
 
 // Tipo usado para retornar itens do catálogo de startups (nomes, descrição, valores formatados etc.).

@@ -259,27 +259,10 @@ class AuthService {
       );
     }
 
-    final docRef = _firestore.collection('usuarios').doc(user.uid);
-
     try {
-      final snapshot = await docRef.get();
-      final payload = <String, dynamic>{
-        'mfaHabilitado': enabled,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      if (snapshot.exists) {
-        await docRef.update(payload);
-      } else {
-        await docRef.set(
-          {
-            ..._buildDefaultUserProfilePayload(user),
-            ...payload,
-          },
-          SetOptions(merge: true),
-        );
-      }
-    } on FirebaseException catch (error, stackTrace) {
+      final callable = _functions.httpsCallable('atualizarMfaStatus');
+      await callable.call({'habilitado': enabled});
+    } on FirebaseFunctionsException catch (error, stackTrace) {
       debugPrint(
         '[AuthService] updateCurrentUserMfaStatus error: '
         'code=${error.code}, message=${error.message}',
@@ -343,7 +326,12 @@ class AuthService {
           .map((doc) => WalletTransaction.fromFirestore(doc.id, doc.data()))
           .toList();
 
-      transacoes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      transacoes.sort((a, b) {
+        if (a.createdAt == null && b.createdAt == null) return 0;
+        if (a.createdAt == null) return 1;
+        if (b.createdAt == null) return -1;
+        return b.createdAt!.compareTo(a.createdAt!);
+      });
       return transacoes;
     });
   }
@@ -364,7 +352,12 @@ class AuthService {
         .map((doc) => WalletTransaction.fromFirestore(doc.id, doc.data()))
         .toList();
 
-    transacoes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    transacoes.sort((a, b) {
+        if (a.createdAt == null && b.createdAt == null) return 0;
+        if (a.createdAt == null) return 1;
+        if (b.createdAt == null) return -1;
+        return b.createdAt!.compareTo(a.createdAt!);
+      });
     return transacoes;
   }
 

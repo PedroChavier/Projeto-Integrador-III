@@ -21,7 +21,7 @@ class _WalletScreenState extends State<WalletScreen> {
   final AuthService _authService = AuthService();
   final BalcaoService _balcaoService = BalcaoService();
   late final Stream<Wallet> _walletStream;
-  late final Stream<List<WalletHolding>> _holdingsStream;
+  late Stream<List<WalletHolding>> _holdingsStream;
   late final Stream<List<OrderHistoryEntry>> _orderHistoryStream;
   Future<List<WalletTransaction>>? _transacoesFuture;
   final NumberFormat _currencyFormat = NumberFormat.currency(
@@ -58,6 +58,34 @@ class _WalletScreenState extends State<WalletScreen> {
         return StreamBuilder<List<WalletHolding>>(
           stream: _holdingsStream,
           builder: (context, holdingsSnapshot) {
+            if (holdingsSnapshot.hasError) {
+              return Scaffold(
+                backgroundColor: Colors.white,
+                body: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          color: Colors.redAccent, size: 40),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Erro ao carregar carteira',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _holdingsStream = _balcaoService.watchHoldings();
+                        }),
+                        child: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  ),
+                ),
+                bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+              );
+            }
             final holdings = holdingsSnapshot.data ?? const <WalletHolding>[];
 
             return Scaffold(
@@ -437,7 +465,7 @@ class _WalletScreenState extends State<WalletScreen> {
       net += t.positivo ? t.valor : -t.valor;
     }
     final sign = net >= 0 ? '+' : '−';
-    return 'Saldo líquido · $sign${_currencyFormat.format(net.abs())}';
+    return 'Saldo bruto · $sign${_currencyFormat.format(net.abs())}';
   }
 }
 

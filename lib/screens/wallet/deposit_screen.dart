@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
@@ -24,6 +25,11 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
   final TextEditingController _valorController = TextEditingController();
   double _valorDigitado = 0.0;
   bool _salvando = false;
+  final _currencyFormat = NumberFormat.currency(
+    locale: 'pt_BR',
+    symbol: 'R\$ ',
+    decimalDigits: 2,
+  );
 
   @override
   void initState() {
@@ -44,9 +50,7 @@ class _AdicionarSaldoScreenState extends State<AdicionarSaldoScreen> {
 
   double get _novoSaldo => widget.saldoAtual + _valorDigitado;
 
-  String _formatReal(double valor) {
-    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
-  }
+  String _formatReal(double valor) => _currencyFormat.format(valor);
 
   double _parseValorFormatado(String valorFormatado) {
     final digits = valorFormatado.replaceAll(RegExp(r'[^0-9]'), '');
