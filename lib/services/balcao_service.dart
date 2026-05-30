@@ -44,6 +44,7 @@ class BalcaoService {
         lockupQuantidadeValor:
             (cfg['lockup_quantidade_valor'] as num?)?.toDouble() ?? 0.5,
         lockupDiasMinimo: (cfg['lockup_dias_minimo'] as num?)?.toInt() ?? 30,
+        lockupDesabilitado: (cfg['lockup_desabilitado'] as bool?) ?? false,
         dataLancamento: (d['data_lancamento'] as Timestamp?)?.toDate(),
       );
     }));
@@ -243,6 +244,7 @@ class BalcaoService {
           quantidadeReservada: tokensReservados,
           precoMedio: preco,
           valorInvestido: totalTokens * preco,
+          precoEmissao: (cfg['preco_emissao'] as num?)?.toDouble() ?? 0,
         ));
       }
       holdings.sort((a, b) => b.valorInvestido.compareTo(a.valorInvestido));
@@ -261,16 +263,19 @@ class BalcaoService {
         .limit(limit)
         .snapshots()
         .asyncMap((snap) async {
-      final cache = <String, ({String nome, String sigla})>{};
+      final cache = <String, ({String nome, String sigla, double precoAtual})>{};
       final entries = <OrderHistoryEntry>[];
       for (final doc in snap.docs) {
         final d = doc.data();
         final startupId = (d['startup_id'] as String?) ?? '';
         String startupNome = cache[startupId]?.nome ?? '';
         String startupSigla = cache[startupId]?.sigla ?? '';
+        double precoAtual = cache[startupId]?.precoAtual ?? 0;
         if (startupNome.isEmpty && startupId.isNotEmpty) {
           try {
-            final s = await _db.collection('startups').doc(startupId).get();
+            final ref = _db.collection('startups').doc(startupId);
+            final (cfg, st) = await _loadBalcao(ref);
+            final s = await ref.get();
             final sd = s.data() ?? {};
             startupNome = (sd['nome'] as String?) ?? startupId;
             final siglaRaw = sd['sigla'] as String?;
@@ -281,7 +286,11 @@ class BalcaoService {
                     .substring(
                         0, startupNome.replaceAll(' ', '').length.clamp(0, 4))
                     .toUpperCase();
-            cache[startupId] = (nome: startupNome, sigla: startupSigla);
+            final lastPrice = (st['last_price'] as num?)?.toDouble() ?? 0;
+            precoAtual = lastPrice > 0
+                ? lastPrice
+                : (cfg['preco_emissao'] as num?)?.toDouble() ?? 0;
+            cache[startupId] = (nome: startupNome, sigla: startupSigla, precoAtual: precoAtual);
           } catch (_) {
             startupNome = startupId;
           }
@@ -302,6 +311,7 @@ class BalcaoService {
           status: lastStatus,
           createdAt:
               (d['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          precoAtual: precoAtual,
         ));
       }
       return entries;
@@ -327,29 +337,6 @@ class BalcaoService {
         tokensLivres: (d['tokens_livres'] as num?)?.toInt() ?? 0,
         tokensReservados: (d['tokens_reservados'] as num?)?.toInt() ?? 0,
       );
-    });
-  }
-
-  Stream<List<({int qty, DateTime acquiredAt})>> watchTokenPurchases(
-      String startupId) {
-    final uid = _uid;
-    if (uid == null) return Stream.value(const []);
-    return _db
-        .collection('usuarios')
-        .doc(uid)
-        .collection('token_purchases')
-        .doc(startupId)
-        .snapshots()
-        .map((snap) {
-      if (!snap.exists) return <({int qty, DateTime acquiredAt})>[];
-      final entries = snap.data()?['entries'];
-      if (entries is! List) return <({int qty, DateTime acquiredAt})>[];
-      return entries.whereType<Map>().map((e) {
-        final qty = (e['qty'] as num?)?.toInt() ?? 0;
-        final ts = e['acquired_at'];
-        if (ts is! Timestamp || qty <= 0) return null;
-        return (qty: qty, acquiredAt: ts.toDate());
-      }).whereType<({int qty, DateTime acquiredAt})>().toList();
     });
   }
 
@@ -463,6 +450,10 @@ class BalcaoService {
           final avail = m['available_qty'];
           final req = m['requested_qty'];
           return 'Liquidez insuficiente no book: só há $avail tokens à venda (você pediu $req).';
+        case 'SELF_TRADE_BLOCKED':
+          return 'Você não pode executar contra suas próprias ordens. Aguarde outras ofertas no book.';
+        case 'INSUFFICIENT_LIQUIDITY_AT_EXECUTION':
+          return 'Liquidez insuficiente no momento da execução. Tente novamente.';
         case 'LOCKUP_QUANTITY_VIOLATION':
           final tipo = m['lockup_type'] as String?;
           if (tipo == 'percentual') {
@@ -477,21 +468,11 @@ class BalcaoService {
             return 'Vendas bloqueadas: startup vendeu $sold tokens (mínimo $req). Faltam $needed tokens.';
           }
         case 'LOCKUP_TIME_VIOLATION':
-          final avail = m['available_to_sell'] ?? 0;
-          if (avail == 0) {
-            final breakdown =
-                m['locked_tokens_breakdown'] as List<dynamic>? ?? [];
-            if (breakdown.isNotEmpty) {
-              final first = breakdown.first as Map<String, dynamic>;
-              final days = first['days_remaining'];
-              return 'Tokens bloqueados por vesting. Disponíveis em $days dia(s).';
-            }
-            return 'Tokens ainda sob período de vesting (lock-up temporal).';
+          final days = m['days_remaining'];
+          if (days != null) {
+            return 'Mercado secundário ainda em lock-up. Abertura em $days dia(s).';
           }
-          return 'Apenas $avail tokens desbloqueados disponíveis para venda.';
-        case 'LOCKUP_PARTIAL_VIOLATION':
-          final avail = m['available_to_sell'] ?? 0;
-          return 'Apenas $avail tokens estão desbloqueados. Deseja vender $avail?';
+          return 'Mercado secundário ainda em período de lock-up.';
         case 'PRICE_OUT_OF_RANGE':
           final min = m['min_allowed'];
           final max = m['max_allowed'];
@@ -539,6 +520,7 @@ class OrderHistoryEntry {
   final int qtyOriginal;
   final String status; // último status em status_changes
   final DateTime createdAt;
+  final double precoAtual; // last_price da startup no momento do carregamento
 
   const OrderHistoryEntry({
     required this.id,
@@ -551,5 +533,6 @@ class OrderHistoryEntry {
     required this.qtyOriginal,
     required this.status,
     required this.createdAt,
+    this.precoAtual = 0,
   });
 }

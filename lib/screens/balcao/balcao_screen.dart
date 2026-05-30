@@ -52,9 +52,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   Map<String, int> _posicoes = const {};
   StreamSubscription<List<WalletHolding>>? _posicoesSub;
 
-  // Entradas de compra do investidor na startup atual (para lock-up de tempo)
-  List<({int qty, DateTime acquiredAt})> _purchaseEntries = [];
-
   // Stream subscriptions – cancelled on startup change and dispose
   StreamSubscription<(List<Order>, List<Order>)>? _ordersSub;
   StreamSubscription<List<Trade>>? _tradesSub;
@@ -62,7 +59,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       ({double? lastPrice, int tokensVendidos, int tokensEmitidos})>? _stateSub;
   StreamSubscription<Wallet>? _walletSub;
   StreamSubscription<({int tokensLivres, int tokensReservados})>? _positionSub;
-  StreamSubscription<List<({int qty, DateTime acquiredAt})>>? _purchasesSub;
 
   @override
   void initState() {
@@ -141,11 +137,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         _orderbookState.updateStartupState(s.lastPrice, s.tokensVendidos);
       }
     });
-
-    _purchaseEntries = [];
-    _purchasesSub = _service.watchTokenPurchases(startupId).listen((entries) {
-      if (mounted) setState(() => _purchaseEntries = entries);
-    });
   }
 
   void _cancelSubscriptions() {
@@ -154,13 +145,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     _stateSub?.cancel();
     _walletSub?.cancel();
     _positionSub?.cancel();
-    _purchasesSub?.cancel();
     _ordersSub = null;
     _tradesSub = null;
     _stateSub = null;
     _walletSub = null;
     _positionSub = null;
-    _purchasesSub = null;
   }
 
   void _changeStartup(int index) {
@@ -206,6 +195,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   // Retorna true quando qualquer lock-up impede a venda.
   // Ambos devem estar desbloqueados simultaneamente para vender.
   bool _isSellLocked(OrderbookState state, Startup startup) {
+    if (startup.lockupDesabilitado) return false;
+
     // Lock-up por valor (global)
     bool valorUnlocked = true;
     if (startup.lockupQuantidadeTipo != null && startup.lockupQuantidadeValor > 0) {
@@ -216,20 +207,12 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       valorUnlocked = vendidos >= required;
     }
 
-    // Lock-up por tempo: verifica datas reais de compra do investidor,
-    // igual ao que o backend faz em validateLockupTempo.
+    // Lock-up por tempo (modelo IPO): contado a partir de data_lancamento da startup.
     bool tempoUnlocked = true;
-    if (startup.lockupDiasMinimo > 0) {
-      if (_purchaseEntries.isEmpty) {
-        tempoUnlocked = false;
-      } else {
-        final lockupMs = startup.lockupDiasMinimo * Duration.millisecondsPerDay;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final available = _purchaseEntries
-            .where((e) => now >= e.acquiredAt.millisecondsSinceEpoch + lockupMs)
-            .fold(0, (sum, e) => sum + e.qty);
-        tempoUnlocked = available > 0;
-      }
+    if (startup.lockupDiasMinimo > 0 && startup.dataLancamento != null) {
+      final unlockMs = startup.dataLancamento!.millisecondsSinceEpoch +
+          startup.lockupDiasMinimo * Duration.millisecondsPerDay;
+      tempoUnlocked = DateTime.now().millisecondsSinceEpoch >= unlockMs;
     }
 
     return !(valorUnlocked && tempoUnlocked);
@@ -1817,6 +1800,21 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   highlight: estimatedTotal != null && estimatedTotal > 0,
                   alertColor: isOverBudget,
                 ),
+                if (estimatedTotal != null && estimatedTotal > 0 && state.inputQty > 0) ...[
+                  const Divider(height: 14, color: Color(0xFFEEEEEE)),
+                  _buildSummaryDeltaLine(
+                    'Saldo após',
+                    state.formatPrice(brlDisponivel + (isBuy ? -estimatedTotal : estimatedTotal)),
+                    '${isBuy ? '−' : '+'} ${state.formatPrice(estimatedTotal)}',
+                    deltaPositive: !isBuy,
+                  ),
+                  _buildSummaryDeltaLine(
+                    'Tokens após',
+                    '${state.formatQty(state.wallet.tokens + (isBuy ? state.inputQty : -state.inputQty))} $ticker',
+                    '${isBuy ? '+' : '−'} ${state.formatQty(state.inputQty)}',
+                    deltaPositive: isBuy,
+                  ),
+                ],
                 if (isMarket && estimatedTotal != null && estimatedTotal > 0)
                   const Padding(
                     padding: EdgeInsets.only(top: 6),
@@ -2176,6 +2174,37 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               fontWeight:
                   (highlight || alertColor) ? FontWeight.w800 : FontWeight.w700,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryDeltaLine(
+    String label,
+    String newValue,
+    String deltaText, {
+    required bool deltaPositive,
+  }) {
+    final deltaColor = deltaPositive ? _buyColor : _sellColor;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          Text(
+            newValue,
+            style: const TextStyle(
+                fontSize: 11, color: _ink, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            deltaText,
+            style: TextStyle(
+                fontSize: 11, color: deltaColor, fontWeight: FontWeight.w800),
           ),
         ],
       ),

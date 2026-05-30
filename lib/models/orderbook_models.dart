@@ -66,6 +66,7 @@ class Startup {
   final String? lockupQuantidadeTipo; // 'percentual' | 'absoluto'
   final double lockupQuantidadeValor; // decimal (0.5 = 50%) ou absoluto
   final int lockupDiasMinimo;
+  final bool lockupDesabilitado;
   final DateTime? dataLancamento;
 
   Startup({
@@ -78,6 +79,7 @@ class Startup {
     this.lockupQuantidadeTipo = 'percentual',
     this.lockupQuantidadeValor = 0.5,
     this.lockupDiasMinimo = 30,
+    this.lockupDesabilitado = false,
     this.dataLancamento,
   });
 

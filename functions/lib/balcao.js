@@ -69,9 +69,6 @@ function userWalletRef(uid) {
 function userPositionRef(uid, startupId) {
     return db.collection("usuarios").doc(uid).collection("positions").doc(startupId);
 }
-function userPurchasesRef(uid, startupId) {
-    return db.collection("usuarios").doc(uid).collection("token_purchases").doc(startupId);
-}
 function userOrderHistoryRef(uid, orderId) {
     return db.collection("usuarios").doc(uid).collection("order_history").doc(orderId);
 }
@@ -104,6 +101,7 @@ async function readConfig(startupId) {
         limite_preco_percentual: cfg.limite_preco_percentual ?? null,
         qty_maxima_por_ordem: cfg.qty_maxima_por_ordem ?? 100000,
         max_ordens_abertas_por_usuario: cfg.max_ordens_abertas_por_usuario ?? 100,
+        lockup_desabilitado: cfg.lockup_desabilitado ?? false,
     };
 }
 async function readState(startupId) {
@@ -177,53 +175,21 @@ function validateLockupQuantidade(config, state) {
         }
     }
 }
-function validateLockupTempoFromSnap(snap, qtyRequested, lockupDias) {
-    if (!snap.exists) {
-        throwHttp("failed-precondition", JSON.stringify({
-            code: "LOCKUP_TIME_VIOLATION",
-            available_to_sell: 0,
-            locked_qty: 0,
-        }));
-    }
-    const entries = snap.data()?.entries ?? [];
+// Modelo IPO: lockup temporal é global por startup, contado a partir de data_lancamento.
+function validateLockupTempo(dataLancamento, lockupDias) {
+    if (lockupDias === 0)
+        return;
+    if (!dataLancamento)
+        return;
+    const unlockMs = dataLancamento.toMillis() + lockupDias * 86400000;
     const now = Date.now();
-    const lockupMs = lockupDias * 86400000;
-    let available = 0;
-    let locked = 0;
-    const breakdown = [];
-    for (const entry of entries) {
-        const unlockMs = entry.acquired_at.toMillis() + lockupMs;
-        if (now >= unlockMs) {
-            available += entry.qty;
-        }
-        else {
-            locked += entry.qty;
-            breakdown.push({
-                qty: entry.qty,
-                unlock_at: new Date(unlockMs).toISOString(),
-                days_remaining: Math.ceil((unlockMs - now) / 86400000),
-            });
-        }
-    }
-    if (available <= 0) {
-        throwHttp("failed-precondition", JSON.stringify({
-            code: "LOCKUP_TIME_VIOLATION",
-            locked_tokens_breakdown: breakdown,
-            available_to_sell: 0,
-        }));
-    }
-    if (available < qtyRequested) {
-        throwHttp("failed-precondition", JSON.stringify({
-            code: "LOCKUP_PARTIAL_VIOLATION",
-            available_to_sell: available,
-            locked_qty: locked,
-            requested_qty: qtyRequested,
-        }));
-    }
-}
-async function validateLockupTempo(uid, startupId, qtyRequested, lockupDias) {
-    const snap = await userPurchasesRef(uid, startupId).get();
-    validateLockupTempoFromSnap(snap, qtyRequested, lockupDias);
+    if (now >= unlockMs)
+        return;
+    throwHttp("failed-precondition", JSON.stringify({
+        code: "LOCKUP_TIME_VIOLATION",
+        unlock_at: new Date(unlockMs).toISOString(),
+        days_remaining: Math.ceil((unlockMs - now) / 86400000),
+    }));
 }
 function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
     // Sort: bids descending by price (market bids first), asks ascending by price (market asks first)
@@ -363,6 +329,7 @@ exports.ordersCreate = functions
     const startupSnap = await db.collection("startups").doc(startupId).get();
     if (!startupSnap.exists)
         throwHttp("not-found", "Startup não encontrada.");
+    const dataLancamento = startupSnap.data()?.data_lancamento ?? null;
     const [config, state] = await Promise.all([
         readConfig(startupId),
         readState(startupId),
@@ -370,10 +337,10 @@ exports.ordersCreate = functions
     if (qty > config.qty_maxima_por_ordem) {
         throwHttp("invalid-argument", `Quantidade excede o máximo de ${config.qty_maxima_por_ordem} por ordem.`);
     }
-    // Lock-up validation for investor sell orders
-    if (side === "sell") {
+    // Lock-up validation for investor sell orders (IPO model)
+    if (side === "sell" && !config.lockup_desabilitado) {
         validateLockupQuantidade(config, state);
-        await validateLockupTempo(uid, startupId, qty, config.lockup_dias_minimo);
+        validateLockupTempo(dataLancamento, config.lockup_dias_minimo);
     }
     // Max open orders check
     const openOrdersSnap = await startupOrdersRef(startupId)
@@ -480,7 +447,7 @@ exports.ordersCreate = functions
         // ── ALL READS FIRST (Firestore tx invariant) ──
         const { state: txState, stateRef } = await readStateInTx(t, startupId);
         const ordersRef = startupOrdersRef(startupId);
-        const reads = [
+        const [txWalletSnap, txPositionSnap, bidsSnap, asksSnap] = await Promise.all([
             t.get(userWalletRef(uid)),
             t.get(userPositionRef(uid, startupId)),
             t.get(ordersRef
@@ -489,18 +456,7 @@ exports.ordersCreate = functions
             t.get(ordersRef
                 .where("status", "in", ["aberta", "parcialmente_executada"])
                 .where("side", "==", "sell")),
-        ];
-        if (side === "sell") {
-            reads.push(t.get(userPurchasesRef(uid, startupId)));
-        }
-        const readResults = await Promise.all(reads);
-        const txWalletSnap = readResults[0];
-        const txPositionSnap = readResults[1];
-        const bidsSnap = readResults[2];
-        const asksSnap = readResults[3];
-        const txPurchasesSnap = side === "sell"
-            ? readResults[4]
-            : null;
+        ]);
         const txWallet = (txWalletSnap.data() ?? {});
         const txPosition = (txPositionSnap.data() ?? {});
         const txSaldoDisponivel = (txWallet.saldo_brl ?? 0) - (txWallet.saldo_brl_reservado ?? 0);
@@ -520,10 +476,10 @@ exports.ordersCreate = functions
                 requested_qty: qty,
             }));
         }
-        // Revalidate lockup inside the transaction (state and purchases re-read)
-        if (side === "sell") {
+        // Revalidate lockup inside the transaction (IPO model: data_lancamento + lockup_dias_minimo)
+        if (side === "sell" && !config.lockup_desabilitado) {
             validateLockupQuantidade(config, txState);
-            validateLockupTempoFromSnap(txPurchasesSnap, qty, config.lockup_dias_minimo);
+            validateLockupTempo(dataLancamento, config.lockup_dias_minimo);
         }
         // Build in-memory orderbook with the new order included (no DB write yet)
         const newOrderForMatching = { id: newOrderRef.id, ...newOrderData };
@@ -550,6 +506,17 @@ exports.ordersCreate = functions
                 }));
             }
         }
+        // Detectar novos investidores (primeira posição em tokens da startup) para
+        // incrementar nmrInvestidores transacionalmente. Leituras adicionais ainda
+        // são válidas porque nenhum write foi feito ainda nesta TX.
+        const newStartupBuyers = [...new Set(matchResult.trades.filter(tr => tr.seller_type === "startup").map(tr => tr.buyer_id))];
+        const buyerPositionSnaps = await Promise.all(newStartupBuyers.map(bid => bid === uid ? Promise.resolve(txPositionSnap) : t.get(userPositionRef(bid, startupId))));
+        const newInvestorsDelta = buyerPositionSnaps.filter(snap => {
+            const pos = snap.data();
+            if (!pos)
+                return true;
+            return ((pos.tokens_livres ?? 0) + (pos.tokens_reservados ?? 0)) === 0;
+        }).length;
         // ── ALL WRITES AFTER READS ──
         // Insert the new order
         t.set(newOrderRef, newOrderData);
@@ -618,16 +585,6 @@ exports.ordersCreate = functions
                 order_id: trade.buy_order_id,
                 trade_id: trade.id,
             }, now);
-            t.set(userPurchasesRef(trade.buyer_id, startupId), {
-                qty_total: admin.firestore.FieldValue.increment(trade.qty),
-                entries: admin.firestore.FieldValue.arrayUnion({
-                    qty: trade.qty,
-                    acquired_at: trade.executed_at,
-                    source: "buy_order",
-                    order_id: trade.buy_order_id,
-                }),
-                updated_at: now,
-            }, { merge: true });
             // Seller (investor only): credit BRL, release tokens.
             // Limit sellers had tokens reserved; market sellers deduct from tokens_livres directly.
             if (trade.seller_type === "investor") {
@@ -695,25 +652,14 @@ exports.ordersCreate = functions
             ...(capitalFromStartup > 0
                 ? { cptAportado: admin.firestore.FieldValue.increment(capitalFromStartup) }
                 : {}),
+            ...(newInvestorsDelta > 0
+                ? { nmrInvestidores: admin.firestore.FieldValue.increment(newInvestorsDelta) }
+                : {}),
             updated_at: now,
         }, { merge: true });
     });
     // Update best_bid / best_ask after transaction (async, non-blocking for response)
     updateBestPrices(startupId).catch((e) => functions.logger.error("updateBestPrices failed", { startupId, error: String(e) }));
-    // Best-effort: increment nmrInvestidores for first-time buyers of startup tokens
-    const newStartupBuyers = [...new Set(executedTrades
-            .filter(tr => tr.seller_type === "startup")
-            .map(tr => tr.buyer_id))];
-    if (newStartupBuyers.length > 0) {
-        Promise.all(newStartupBuyers.map(async (buyerId) => {
-            const purchasesSnap = await userPurchasesRef(buyerId, startupId).get();
-            const entries = purchasesSnap.data()?.entries ?? [];
-            if (entries.length === 1) {
-                // First purchase ever for this investor in this startup
-                await startupBalcaoRef(startupId).doc("state").set({ nmrInvestidores: admin.firestore.FieldValue.increment(1) }, { merge: true });
-            }
-        })).catch(() => undefined);
-    }
     // Best-effort: clear investidor_ativo for investor sellers who sold all tokens
     const investorSellerIds = [...new Set(executedTrades.filter(tr => tr.seller_type === "investor").map(tr => tr.seller_id))];
     if (investorSellerIds.length > 0) {

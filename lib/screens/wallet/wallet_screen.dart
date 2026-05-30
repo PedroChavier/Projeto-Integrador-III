@@ -596,6 +596,33 @@ class _CollapsibleSection extends StatelessWidget {
   }
 }
 
+class _VariacaoBadge extends StatelessWidget {
+  const _VariacaoBadge({required this.pct});
+
+  final double pct;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPositive = pct > 0;
+    final isNegative = pct < 0;
+    final color = isPositive
+        ? const Color(0xFF2E7D32)
+        : isNegative
+            ? const Color(0xFFE53935)
+            : Colors.black45;
+    final sign = isPositive ? '+' : '';
+    final text = '$sign${pct.toStringAsFixed(2).replaceAll('.', ',')}%';
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: color,
+      ),
+    );
+  }
+}
+
 class _HoldingCard extends StatelessWidget {
   const _HoldingCard({
     required this.holding,
@@ -702,9 +729,18 @@ class _HoldingCard extends StatelessWidget {
                 'Preço atual',
                 style: const TextStyle(fontSize: 12, color: Colors.black45),
               ),
-              Text(
-                currencyFormat.format(holding.precoMedio),
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    currencyFormat.format(holding.precoMedio),
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  if (holding.precoEmissao > 0) ...[
+                    const SizedBox(width: 6),
+                    _VariacaoBadge(pct: holding.variacaoEmissao),
+                  ],
+                ],
               ),
             ],
           ),
@@ -820,13 +856,24 @@ class _OrderHistoryCard extends StatelessWidget {
                         color: Colors.black87,
                       ),
                     ),
-                    Text(
-                      '${order.qtyOriginal} ${order.startupSigla.isNotEmpty ? order.startupSigla : 'tkn'} · $priceText',
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.black45,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${order.qtyOriginal} ${order.startupSigla.isNotEmpty ? order.startupSigla : 'tkn'} · $priceText',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.black45,
+                          ),
+                        ),
+                        if (isBuy && order.price > 0 && order.precoAtual > 0) ...[
+                          const SizedBox(width: 6),
+                          _VariacaoBadge(
+                            pct: (order.precoAtual - order.price) / order.price * 100,
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
