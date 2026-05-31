@@ -35,6 +35,7 @@ class SociedadeTab extends StatelessWidget {
           if (s == null || s.socios.isEmpty)
             const _EmptyState(mensagem: 'Nenhum sócio cadastrado.')
           else
+          //Lista com separdores automaticos entre os itens
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(), // Desativa scroll interno

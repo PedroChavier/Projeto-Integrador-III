@@ -20,8 +20,10 @@ class VisaoGeralTab extends StatelessWidget {
     final url = startup?.videoUrl;
     if (url == null || url.isEmpty) return;
     final uri = Uri.parse(url);
+
+    //verifica se consegue abrir a url externa
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      await launchUrl(uri, mode: LaunchMode.externalApplication); //abre a url
     }
   }
 
@@ -228,7 +230,7 @@ class VisaoGeralTab extends StatelessWidget {
 
       // Calcula a meta em tokens (por percentual ou valor absoluto)
       if (s.lockupQuantidadeTipo == 'percentual') {
-        required = (s.lockupQuantidadeValor * s.totalTokensEmitidos).ceil();
+        required = (s.lockupQuantidadeValor * s.totalTokensEmitidos).ceil(); //arredonda para cima
         final pct = (s.lockupQuantidadeValor * 100).toStringAsFixed(0);
         metaLabel = 'meta: $pct% dos tokens emitidos';
       } else {

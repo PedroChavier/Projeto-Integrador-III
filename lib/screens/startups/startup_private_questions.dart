@@ -14,7 +14,7 @@ class ChatPrivadoScreen extends StatefulWidget {
 
   const ChatPrivadoScreen({super.key, required this.startup});
 
-  // Método estático para navegar com animação de slide da direita
+  //Navega para a tela de chat privado com animação de entrada da direita para a esquerda.
   static Future<void> push(BuildContext context, Startup startup) {
     return Navigator.push(
       context,
