@@ -1,5 +1,6 @@
 //Pedro Andre do Carmo Chavier -25018639
 
+//Gerado pelo copilador do TypeScript
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -34,49 +35,77 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+
+
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.inicializarOrdemEmissao = exports.getTrades = exports.getOrderbook = exports.ordersCancel = exports.ordersCreate = void 0;
+
+
 const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions/v1"));
-const rate_limit_1 = require("./rate_limit");
+const rate_limit_1 = require("./rate_limit");  
+
 const db = admin.firestore();
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+//Erro HTTP padrao com codigo e mensagem
 function throwHttp(code, msg) {
     throw new functions.https.HttpsError(code, msg);
 }
+
+//Valida se o campo é um string
 function requireString(value, field) {
     if (typeof value !== "string" || !value.trim()) {
         throwHttp("invalid-argument", `${field} obrigatorio.`);
     }
     return value.trim();
 }
+
+//Valida se um campo é um numero inteiro positivo
 function requirePositiveInteger(value, field) {
     if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
         throwHttp("invalid-argument", `${field} deve ser um inteiro positivo.`);
     }
     return value;
 }
+
+//Referencias as coleções do firebase
+
+//ordens de compra e venda de uma startup
 function startupOrdersRef(startupId) {
     return db.collection("startups").doc(startupId).collection("orders");
 }
+
+//Historico de negociações
 function startupTradesRef(startupId) {
     return db.collection("startups").doc(startupId).collection("trades");
 }
+
+//Configurações e estado do balcão
 function startupBalcaoRef(startupId) {
     return db.collection("startups").doc(startupId).collection("balcao");
 }
+
+//Carteira BRL do usuario
 function userWalletRef(uid) {
     return db.collection("usuarios").doc(uid).collection("wallet").doc("main");
 }
+
+//Posição de tokens de uma startup que o usuario possui
 function userPositionRef(uid, startupId) {
     return db.collection("usuarios").doc(uid).collection("positions").doc(startupId);
 }
+
+//Historico de uma ordem especifica do usuario
 function userOrderHistoryRef(uid, orderId) {
     return db.collection("usuarios").doc(uid).collection("order_history").doc(orderId);
 }
+
+//Grava log de auditoria dentro de uma transação
 function userAuditLogRef(uid) {
     return db.collection("usuarios").doc(uid).collection("audit_log").doc();
 }
+
 // Anexa entrada de auditoria de mutacao de saldo dentro de uma transacao.
 function writeAuditLog(t, uid, entry, now) {
     t.set(userAuditLogRef(uid), {
@@ -84,7 +113,8 @@ function writeAuditLog(t, uid, entry, now) {
         created_at: now,
     });
 }
-// ─── DB Reads (with embedded-map fallback) ───────────────────────────────────
+
+//Le as configurações do balcao da startup (preço emissao, lockoup, limites...)
 async function readConfig(startupId) {
     const subSnap = await startupBalcaoRef(startupId).doc("config").get();
     if (subSnap.exists)
@@ -94,6 +124,8 @@ async function readConfig(startupId) {
         throwHttp("not-found", "Startup não encontrada.");
     const data = startupSnap.data();
     const cfg = (data.balcao?.config ?? {});
+
+    //retorna a s configurações com valores padrão caso algum campo esteja ausente
     return {
         tokens_emitidos: cfg.tokens_emitidos ?? 0,
         preco_emissao: cfg.preco_emissao ?? 0,
@@ -106,15 +138,21 @@ async function readConfig(startupId) {
         lockup_desabilitado: cfg.lockup_desabilitado ?? false,
     };
 }
+
+//Le o estado atual do mercado (ultimo preço, tokens vendidos, melhor bid/ask)
 async function readState(startupId) {
     const subSnap = await startupBalcaoRef(startupId).doc("state").get();
     if (subSnap.exists)
         return subSnap.data();
+
     const startupSnap = await db.collection("startups").doc(startupId).get();
+
     if (!startupSnap.exists)
         throwHttp("not-found", "Startup não encontrada.");
+
     const data = startupSnap.data();
     const s = (data.balcao?.state ?? {});
+
     return {
         last_price: s.last_price ?? null,
         tokens_vendidos_startup: s.tokens_vendidos_startup ?? 0,
@@ -125,18 +163,25 @@ async function readState(startupId) {
         total_trades: s.total_trades ?? 0,
     };
 }
+
+//Versão do readState para uso dentro de uma transação Firestore
 async function readStateInTx(t, startupId) {
     const stateRef = startupBalcaoRef(startupId).doc("state");
     const stateSnap = await t.get(stateRef);
+
     if (stateSnap.exists)
         return { state: stateSnap.data(), stateRef };
-    // fallback: read embedded from startup doc inside the same tx
+
+    // fallback: le o documento caso nao tenha subcoleção
     const startupRef = db.collection("startups").doc(startupId);
     const startupSnap = await t.get(startupRef);
+
     if (!startupSnap.exists)
         throwHttp("not-found", "Startup não encontrada.");
+
     const data = startupSnap.data();
     const s = (data.balcao?.state ?? {});
+
     const state = {
         last_price: s.last_price ?? null,
         tokens_vendidos_startup: s.tokens_vendidos_startup ?? 0,
@@ -148,14 +193,17 @@ async function readStateInTx(t, startupId) {
     };
     return { state, stateRef };
 }
-// ─── Lock-up Validation ───────────────────────────────────────────────────────
+
+//Valida lockoup de quantidade - so pode ser vendido se atingir um % minimo dos tokens 
 function validateLockupQuantidade(config, state) {
     const { lockup_quantidade_tipo, lockup_quantidade_valor, tokens_emitidos } = config;
     const { tokens_vendidos_startup } = state;
+
     if (lockup_quantidade_tipo === "percentual") {
         const pct = tokens_emitidos > 0 ? tokens_vendidos_startup / tokens_emitidos : 0;
         if (pct < lockup_quantidade_valor) {
             const needed = Math.ceil(lockup_quantidade_valor * tokens_emitidos - tokens_vendidos_startup);
+
             throwHttp("failed-precondition", JSON.stringify({
                 code: "LOCKUP_QUANTITY_VIOLATION",
                 lockup_type: "percentual",
@@ -177,12 +225,15 @@ function validateLockupQuantidade(config, state) {
         }
     }
 }
-// Modelo IPO: lockup temporal é global por startup, contado a partir de data_lancamento.
+
+//Valida Lockup temporal: o ivestidor nao pode vender antes de X dias
+
 function validateLockupTempo(dataLancamento, lockupDias) {
     if (lockupDias === 0)
         return;
     if (!dataLancamento)
         return;
+
     const unlockMs = dataLancamento.toMillis() + lockupDias * 86400000;
     const now = Date.now();
     if (now >= unlockMs)
@@ -193,8 +244,11 @@ function validateLockupTempo(dataLancamento, lockupDias) {
         days_remaining: Math.ceil((unlockMs - now) / 86400000),
     }));
 }
+
+//Casamento de ordens (order Matching): cruza bids com asks e gera trades
 function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
-    // Sort: bids descending by price (market bids first), asks ascending by price (market asks first)
+
+    //Ordena bids: mercado primeiro, depois maior preço, mercado primeiro e depois menor preço
     const bids = [...rawBids]
         .sort((a, b) => {
         if (a.order_type === "market" && b.order_type !== "market")
@@ -203,6 +257,7 @@ function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
             return 1;
         return b.price - a.price || a.created_at.toMillis() - b.created_at.toMillis();
     });
+
     const asks = [...rawAsks]
         .sort((a, b) => {
         if (a.order_type === "market" && b.order_type !== "market")
@@ -211,16 +266,20 @@ function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
             return 1;
         return a.price - b.price || a.created_at.toMillis() - b.created_at.toMillis();
     });
+
     const result = {
         trades: [],
-        orderUpdates: new Map(),
+        orderUpdates: new Map(), //Mapa de atualizações de startups por order_id
         lastPrice: currentState.last_price,
-        startupTokensSoldDelta: 0,
+        startupTokensSoldDelta: 0, //Quantod tokens fora vendiidos
     };
+
     const mBids = bids.map(o => ({ ...o }));
     const mAsks = asks.map(o => ({ ...o }));
     let bi = 0;
     let ai = 0;
+
+    //Loop principal: tenta casar o melhor bid, com o melhor ask
     while (bi < mBids.length && ai < mAsks.length) {
         const bid = mBids[bi];
         const ask = mAsks[ai];
@@ -234,10 +293,14 @@ function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
         }
         const bidIsMarket = bid.order_type === "market";
         const askIsMarket = ask.order_type === "market";
+
+        //Cruzamento: ordens de mercado sempre cruzmam se bid >= ask
         const crosses = bidIsMarket || askIsMarket || bid.price >= ask.price;
+
         if (!crosses)
             break;
-        // Price taker: market order takes the other side's price; if both market, use last_price or emissionPrice
+
+        // Definição do preço do trade
         let tradePrice;
         if (bidIsMarket && !askIsMarket)
             tradePrice = ask.price;
@@ -247,9 +310,11 @@ function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
             tradePrice = currentState.last_price ?? ask.price;
         else
             tradePrice = ask.price;
+
         const tradeQty = Math.min(bid.qty_restante, ask.qty_restante);
         const now = admin.firestore.Timestamp.now();
         const tradeId = startupTradesRef(startupId).doc().id;
+
         result.trades.push({
             id: tradeId,
             buy_order_id: bid.id,
@@ -265,24 +330,31 @@ function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
             spread_at_execution: currentState.spread,
             impact_price: tradePrice,
         });
+
         bid.qty_executada += tradeQty;
         bid.qty_restante -= tradeQty;
         ask.qty_executada += tradeQty;
         ask.qty_restante -= tradeQty;
+
         const newBidStatus = bid.qty_restante === 0 ? "executada" : "parcialmente_executada";
         const newAskStatus = ask.qty_restante === 0 ? "executada" : "parcialmente_executada";
+        
+        //Registra atualização de status para gravar no banco depois
         result.orderUpdates.set(bid.id, {
             qty_executada: bid.qty_executada,
             qty_restante: bid.qty_restante,
             status: newBidStatus,
             updated_at: now,
         });
+
         result.orderUpdates.set(ask.id, {
             qty_executada: ask.qty_executada,
             qty_restante: ask.qty_restante,
             status: newAskStatus,
             updated_at: now,
         });
+
+        //Acumula os tokens vendidos
         if (ask.seller_type === "startup")
             result.startupTokensSoldDelta += tradeQty;
         result.lastPrice = tradePrice;
@@ -293,34 +365,49 @@ function runMatchingEngine(startupId, currentState, rawBids, rawAsks) {
     }
     return result;
 }
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+// remove a flag investidor_ativo se nao possui mais tokens na startup
 async function clearInvestidorAtivoIfEmpty(uid, startupId) {
     const posRef = userPositionRef(uid, startupId);
     const snap = await posRef.get();
     const pos = (snap.data() ?? {});
+
     const total = (pos.tokens_livres ?? 0) + (pos.tokens_reservados ?? 0);
     if (total <= 0) {
         await posRef.set({ investidor_ativo: false, updated_at: admin.firestore.Timestamp.now() }, { merge: true });
     }
 }
-// ─── Cloud Functions ──────────────────────────────────────────────────────────
+
+//Cloud functions 
+
+// Cria uma nova ordem de compra ou venda
 exports.ordersCreate = functions
-    .region("southamerica-east1")
+    .region("southamerica-east1")  //São paulo
     .https.onCall(async (data, context) => {
+
     const uid = context.auth?.uid;
     if (!uid)
         throwHttp("unauthenticated", "Usuário não autenticado.");
+
+    //Limita a criação de ordens: max de 30 por min
     await (0, rate_limit_1.enforceRateLimit)({ key: uid, action: "ordersCreate", maxPerWindow: 30, windowSeconds: 60 });
+
+    //Valida e extrai parametros da requisição
     const startupId = requireString(data.startup_id, "startup_id");
     const side = requireString(data.side, "side");
     const orderType = requireString(data.order_type, "order_type");
     const qty = requirePositiveInteger(data.qty, "qty");
+
+
     if (side !== "buy" && side !== "sell")
         throwHttp("invalid-argument", "side deve ser 'buy' ou 'sell'.");
     if (orderType !== "market" && orderType !== "limit")
         throwHttp("invalid-argument", "order_type deve ser 'market' ou 'limit'.");
     if (qty > 1000000)
         throwHttp("invalid-argument", "Quantidade excede o limite de 1.000.000.");
+
+    //Ordens de limite exigem preçi explicito
     let limitPrice = 0;
     if (orderType === "limit") {
         if (typeof data.price !== "number" || data.price <= 0) {
@@ -328,23 +415,29 @@ exports.ordersCreate = functions
         }
         limitPrice = data.price;
     }
+
+    //Busca dados da startup e configurações do balcao
     const startupSnap = await db.collection("startups").doc(startupId).get();
     if (!startupSnap.exists)
         throwHttp("not-found", "Startup não encontrada.");
+
     const dataLancamento = startupSnap.data()?.data_lancamento ?? null;
     const [config, state] = await Promise.all([
         readConfig(startupId),
         readState(startupId),
     ]);
+
     if (qty > config.qty_maxima_por_ordem) {
         throwHttp("invalid-argument", `Quantidade excede o máximo de ${config.qty_maxima_por_ordem} por ordem.`);
     }
-    // Lock-up validation for investor sell orders (IPO model)
+
+    // Validação de lockup para ordens de venda de investidores
     if (side === "sell" && !config.lockup_desabilitado) {
         validateLockupQuantidade(config, state);
         validateLockupTempo(dataLancamento, config.lockup_dias_minimo);
     }
-    // Max open orders check
+
+    // Verifova se o usuario atingiu o limite de ordens abertas
     const openOrdersSnap = await startupOrdersRef(startupId)
         .where("user_id", "==", uid)
         .where("status", "in", ["aberta", "parcialmente_executada"])
@@ -352,11 +445,14 @@ exports.ordersCreate = functions
     if (openOrdersSnap.size >= config.max_ordens_abertas_por_usuario) {
         throwHttp("resource-exhausted", `Limite de ${config.max_ordens_abertas_por_usuario} ordens abertas atingido.`);
     }
-    // Balance / token check (outside tx for pre-validation; enforced again inside)
+
+
+    // Pré- validação de saldo de tokens 
     const [walletSnap, positionSnap] = await Promise.all([
         userWalletRef(uid).get(),
         userPositionRef(uid, startupId).get(),
     ]);
+
     const walletData = (walletSnap.data() ?? {});
     const saldoBrl = walletData.saldo_brl ?? 0;
     const saldoBrlReservado = walletData.saldo_brl_reservado ?? 0;
@@ -365,6 +461,8 @@ exports.ordersCreate = functions
     const tokensLivres = positionData.tokens_livres ?? 0;
     const orderPrice = orderType === "limit" ? limitPrice : config.preco_emissao;
     const estimatedCost = Number((orderPrice * qty).toFixed(2));
+
+    //Compra a limite: verifica saldo disponivel
     if (side === "buy" && orderType === "limit" && saldoDisponivel < estimatedCost) {
         throwHttp("failed-precondition", JSON.stringify({
             code: "INSUFFICIENT_BALANCE",
@@ -372,22 +470,28 @@ exports.ordersCreate = functions
             required: estimatedCost,
         }));
     }
-    // Market BUY: estima pior caso varrendo asks ascendentes; bloqueia se book
-    // não cobrir qty (liquidez) ou saldo não cobrir o custo máximo (balance).
+
+
+    // Compra a mercado: varre o book de aks para caçcular custo maximo e verificar liquidez
     if (side === "buy" && orderType === "market") {
+
         const asksSnap = await startupOrdersRef(startupId)
             .where("status", "in", ["aberta", "parcialmente_executada"])
             .where("side", "==", "sell")
             .get();
+
         const asks = asksSnap.docs
             .map((d) => d.data())
             .sort((a, b) => a.price - b.price);
+
         let remaining = qty;
         let maxCost = 0;
+
         for (const ask of asks) {
             const take = Math.min(remaining, ask.qty_restante);
             maxCost += take * ask.price;
             remaining -= take;
+
             if (remaining <= 0)
                 break;
         }
@@ -407,6 +511,8 @@ exports.ordersCreate = functions
             }));
         }
     }
+
+    //Venda a limite, verifica tokens livres disponiveis
     if (side === "sell" && orderType === "limit" && tokensLivres < qty) {
         throwHttp("failed-precondition", JSON.stringify({
             code: "INSUFFICIENT_TOKENS",
@@ -414,7 +520,8 @@ exports.ordersCreate = functions
             requested: qty,
         }));
     }
-    // Apply price limit protection if configured
+
+    // Proteção de preço, rejeita ordens de limite fora do range permitido em relação ao ultimo preço
     if (config.limite_preco_percentual !== null && orderType === "limit" && state.last_price !== null) {
         const maxDev = config.limite_preco_percentual;
         const maxPrice = state.last_price * (1 + maxDev);
@@ -444,11 +551,15 @@ exports.ordersCreate = functions
         created_at: now,
         updated_at: now,
     };
+
     let executedTrades = [];
+
     await db.runTransaction(async (t) => {
-        // ── ALL READS FIRST (Firestore tx invariant) ──
+        
         const { state: txState, stateRef } = await readStateInTx(t, startupId);
         const ordersRef = startupOrdersRef(startupId);
+
+        //Le a carteira, posição e o orderbook completo dentro da transação
         const [txWalletSnap, txPositionSnap, bidsSnap, asksSnap] = await Promise.all([
             t.get(userWalletRef(uid)),
             t.get(userPositionRef(uid, startupId)),
@@ -459,10 +570,13 @@ exports.ordersCreate = functions
                 .where("status", "in", ["aberta", "parcialmente_executada"])
                 .where("side", "==", "sell")),
         ]);
+
         const txWallet = (txWalletSnap.data() ?? {});
         const txPosition = (txPositionSnap.data() ?? {});
         const txSaldoDisponivel = (txWallet.saldo_brl ?? 0) - (txWallet.saldo_brl_reservado ?? 0);
         const txTokensLivres = txPosition.tokens_livres ?? 0;
+
+        
         if (side === "buy" && orderType === "limit" && txSaldoDisponivel < estimatedCost) {
             throwHttp("failed-precondition", JSON.stringify({ code: "INSUFFICIENT_BALANCE" }));
         }
@@ -478,12 +592,14 @@ exports.ordersCreate = functions
                 requested_qty: qty,
             }));
         }
-        // Revalidate lockup inside the transaction (IPO model: data_lancamento + lockup_dias_minimo)
+
+        // revalida lockup dentro da transação
         if (side === "sell" && !config.lockup_desabilitado) {
             validateLockupQuantidade(config, txState);
             validateLockupTempo(dataLancamento, config.lockup_dias_minimo);
         }
-        // Build in-memory orderbook with the new order included (no DB write yet)
+
+        // Monta o orderbook em memoria incluindo a nova ordem e executa o matching
         const newOrderForMatching = { id: newOrderRef.id, ...newOrderData };
         const rawBids = bidsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         const rawAsks = asksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -492,10 +608,10 @@ exports.ordersCreate = functions
         else
             rawAsks.push(newOrderForMatching);
         const matchResult = runMatchingEngine(startupId, txState, rawBids, rawAsks);
+
         executedTrades = matchResult.trades;
-        // Market orders devem ser totalmente preenchidos. Se a liquidez no momento
-        // da TX nao for suficiente (ja consumida por outras ordens concorrentes),
-        // abortamos para evitar fill parcial silencioso.
+
+        // Ordens de mercado devem ser 100% preenchidas,; aborta se liquidez insuficiente
         if (orderType === "market") {
             const filledQty = matchResult.trades
                 .filter(tr => (side === "buy" ? tr.buy_order_id : tr.sell_order_id) === newOrderRef.id)
@@ -508,9 +624,9 @@ exports.ordersCreate = functions
                 }));
             }
         }
-        // Detectar novos investidores (primeira posição em tokens da startup) para
-        // incrementar nmrInvestidores transacionalmente. Leituras adicionais ainda
-        // são válidas porque nenhum write foi feito ainda nesta TX.
+
+
+        // Detecta novos investidores (primeira compra do token da startup) para incrementar contador
         const newStartupBuyers = [...new Set(matchResult.trades.filter(tr => tr.seller_type === "startup").map(tr => tr.buyer_id))];
         const buyerPositionSnaps = await Promise.all(newStartupBuyers.map(bid => bid === uid ? Promise.resolve(txPositionSnap) : t.get(userPositionRef(bid, startupId))));
         const newInvestorsDelta = buyerPositionSnaps.filter(snap => {
@@ -519,10 +635,14 @@ exports.ordersCreate = functions
                 return true;
             return ((pos.tokens_livres ?? 0) + (pos.tokens_reservados ?? 0)) === 0;
         }).length;
-        // ── ALL WRITES AFTER READS ──
-        // Insert the new order
+
+
+        // escritas
+
+        //insere a nova ordem no banco
         t.set(newOrderRef, newOrderData);
-        // Write order history atomically with order creation
+
+        //Registra no historico de ordens de usuario
         t.set(userOrderHistoryRef(uid, newOrderRef.id), {
             startup_id: startupId,
             side,
@@ -532,9 +652,12 @@ exports.ordersCreate = functions
             status_changes: [{ status: "aberta", at: now }],
             created_at: now,
         });
-        // Reserve balance for limit orders
+
+        // Para ordens de limite: reserva o saldo BRL (buy) ou tokens (sell)
         if (orderType === "limit") {
             if (side === "buy") {
+
+                //Reserva BRL para nao ser usado em outra ordem antes do match
                 t.set(userWalletRef(uid), {
                     saldo_brl_reservado: admin.firestore.FieldValue.increment(estimatedCost),
                     updated_at: now,
@@ -547,7 +670,9 @@ exports.ordersCreate = functions
                 }, now);
             }
             else {
-                t.set(userPositionRef(uid, startupId), {
+                t.set
+                //Move tokens livres para reservados (impedem dupla venda)
+                (userPositionRef(uid, startupId), {
                     tokens_reservados: admin.firestore.FieldValue.increment(qty),
                     tokens_livres: admin.firestore.FieldValue.increment(-qty),
                     updated_at: now,
@@ -561,11 +686,13 @@ exports.ordersCreate = functions
                 }, now);
             }
         }
-        // Write trades
+
+        // Processa cada trade gerado pelo matching engine
         for (const trade of matchResult.trades) {
             t.set(startupTradesRef(startupId).doc(trade.id), trade);
             const tradeCost = Number((trade.price * trade.qty).toFixed(2));
-            // Buyer: deduct BRL. Limit orders had BRL reserved upfront; market orders did not.
+
+            //Comprador: debida BRL (se limite, desconta tambem na reserva)
             t.set(userWalletRef(trade.buyer_id), {
                 saldo_brl: admin.firestore.FieldValue.increment(-tradeCost),
                 ...(trade.buyer_order_type === "limit"
@@ -573,6 +700,8 @@ exports.ordersCreate = functions
                     : {}),
                 updated_at: now,
             }, { merge: true });
+
+            //Comprador: credita tokens
             t.set(userPositionRef(trade.buyer_id, startupId), {
                 tokens_livres: admin.firestore.FieldValue.increment(trade.qty),
                 investidor_ativo: true,
@@ -587,13 +716,18 @@ exports.ordersCreate = functions
                 order_id: trade.buy_order_id,
                 trade_id: trade.id,
             }, now);
-            // Seller (investor only): credit BRL, release tokens.
-            // Limit sellers had tokens reserved; market sellers deduct from tokens_livres directly.
+
+
+            
             if (trade.seller_type === "investor") {
+
+                //vendedor(investidor): credita BRL
                 t.set(userWalletRef(trade.seller_id), {
                     saldo_brl: admin.firestore.FieldValue.increment(tradeCost),
                     updated_at: now,
                 }, { merge: true });
+
+                //Vendedor: libera tokens reservados (limite) ou debida livres (mercado)
                 if (trade.seller_order_type === "limit") {
                     t.set(userPositionRef(trade.seller_id, startupId), {
                         tokens_reservados: admin.firestore.FieldValue.increment(-trade.qty),
@@ -617,8 +751,8 @@ exports.ordersCreate = functions
                 }, now);
             }
             else if (trade.seller_type === "startup") {
-                // Receita primaria: capital captado pela startup. Registro per-trade
-                // num audit log dedicado a startup (espelha a captacao em balcao/state.cptAportado).
+                
+                //Venda primaria (startup): registra receita e capta no log da startup
                 t.set(db.collection("startups").doc(startupId).collection("revenue_log").doc(trade.id), {
                     trade_id: trade.id,
                     qty: trade.qty,
@@ -630,22 +764,27 @@ exports.ordersCreate = functions
                 });
             }
         }
-        // Update matched order statuses (use set+merge so it composes with the
-        // new-order t.set() above without requiring the doc to already exist).
+
+
+        // atualiza status das ordens casadas (parcialmente ou totalmente executadas)
+s
         for (const [orderId, updates] of matchResult.orderUpdates) {
             t.set(startupOrdersRef(startupId).doc(orderId), {
                 ...updates,
                 version: admin.firestore.FieldValue.increment(1),
             }, { merge: true });
         }
-        // Recalculate best_bid, best_ask, spread from remaining orders
-        // Use matchResult data: after matching, compute new best prices from updated orders
+
+        
+        // Atualiza estado global do mercado: preço, tokens vendidos, capital captado, numero de investidores
         const newTokensVendidos = txState.tokens_vendidos_startup + matchResult.startupTokensSoldDelta;
         const newLastPrice = matchResult.lastPrice ?? txState.last_price;
+
         // Capital aportado: soma dos trades onde a startup foi vendedora
         const capitalFromStartup = matchResult.trades
             .filter(tr => tr.seller_type === "startup")
             .reduce((sum, tr) => sum + Number((tr.price * tr.qty).toFixed(2)), 0);
+
         t.set(stateRef, {
             last_price: newLastPrice,
             tokens_vendidos_startup: newTokensVendidos,
@@ -660,9 +799,11 @@ exports.ordersCreate = functions
             updated_at: now,
         }, { merge: true });
     });
-    // Update best_bid / best_ask after transaction (async, non-blocking for response)
+
+    //Atualiza best_bid/best_ask de forma assincrona (nao bloqueia resposta) 
     updateBestPrices(startupId).catch((e) => functions.logger.error("updateBestPrices failed", { startupId, error: String(e) }));
-    // Best-effort: clear investidor_ativo for investor sellers who sold all tokens
+
+    // Remove investidor_ativo de vendedores que esvaziaram sua posição
     const investorSellerIds = [...new Set(executedTrades.filter(tr => tr.seller_type === "investor").map(tr => tr.seller_id))];
     if (investorSellerIds.length > 0) {
         Promise.all(investorSellerIds.map(sid => clearInvestidorAtivoIfEmpty(sid, startupId)))
@@ -674,32 +815,44 @@ exports.ordersCreate = functions
         trades: executedTrades,
     };
 });
+
+//Cancela uma ordem aberta do usuario
+//devolve o BRL reservado ou os tokens reservados
 exports.ordersCancel = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
+
     const uid = context.auth?.uid;
     if (!uid)
         throwHttp("unauthenticated", "Usuário não autenticado.");
+
     await (0, rate_limit_1.enforceRateLimit)({ key: uid, action: "ordersCancel", maxPerWindow: 30, windowSeconds: 60 });
+
     const startupId = requireString(data.startup_id, "startup_id");
     const orderId = requireString(data.order_id, "order_id");
     const orderRef = startupOrdersRef(startupId).doc(orderId);
     const orderSnap = await orderRef.get();
+
     if (!orderSnap.exists)
         throwHttp("not-found", "Ordem não encontrada.");
+
     const order = { id: orderId, ...orderSnap.data() };
     if (order.user_id !== uid)
         throwHttp("permission-denied", "Sem permissão para cancelar esta ordem.");
     if (order.status === "executada" || order.status === "cancelada") {
         throwHttp("failed-precondition", "Ordem já executada ou cancelada.");
     }
+
     const now = admin.firestore.Timestamp.now();
     await db.runTransaction(async (t) => {
+        //Marca a ordem como cancelada
         t.update(orderRef, {
             status: "cancelada",
             updated_at: now,
             version: admin.firestore.FieldValue.increment(1),
         });
+
+        //devolve BRL reservado para compras a limite canceladas
         if (order.side === "buy" && order.order_type === "limit") {
             const refund = Number((order.price * order.qty_restante).toFixed(2));
             t.set(userWalletRef(uid), {
@@ -713,6 +866,8 @@ exports.ordersCancel = functions
                 order_id: orderId,
             }, now);
         }
+
+        //Devolve tokens reservados para vendas a limite canceladas
         if (order.side === "sell" && order.order_type === "limit") {
             t.set(userPositionRef(uid, startupId), {
                 tokens_reservados: admin.firestore.FieldValue.increment(-order.qty_restante),
@@ -727,20 +882,31 @@ exports.ordersCancel = functions
                 order_id: orderId,
             }, now);
         }
+
+        //Registra mudança de status no historico de ordens
         t.set(userOrderHistoryRef(uid, orderId), {
             status_changes: admin.firestore.FieldValue.arrayUnion({ status: "cancelada", at: now }),
         }, { merge: true });
     });
+
     updateBestPrices(startupId).catch((e) => functions.logger.error("updateBestPrices failed", { startupId, error: String(e) }));
     return { success: true };
 });
+
+
+//Retorna o livro de ordens atual de uma startup
+//devolve os 20 melhores bids (compra) e 20 melhores asks (vendas)
+
 exports.getOrderbook = functions
     .region("southamerica-east1")
     .https.onCall(async (data, _context) => {
+
     const startupId = requireString(data.startup_id, "startup_id");
     const startupSnap = await db.collection("startups").doc(startupId).get();
+
     if (!startupSnap.exists)
         throwHttp("not-found", "Startup não encontrada.");
+
     const [openOrdersSnap, config, state] = await Promise.all([
         startupOrdersRef(startupId)
             .where("status", "in", ["aberta", "parcialmente_executada"])
@@ -748,15 +914,21 @@ exports.getOrderbook = functions
         readConfig(startupId),
         readState(startupId),
     ]);
+
     const orders = openOrdersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    //Bids: maior preço primeiro
     const buyOrders = orders
         .filter(o => o.side === "buy")
         .sort((a, b) => b.price - a.price)
         .slice(0, 20);
+    
+    //Asks: menor preço primeiro 
     const sellOrders = orders
         .filter(o => o.side === "sell")
         .sort((a, b) => a.price - b.price)
         .slice(0, 20);
+
     return {
         success: true,
         buy_orders: buyOrders,
@@ -770,56 +942,79 @@ exports.getOrderbook = functions
         tokens_emitidos: config.tokens_emitidos,
     };
 });
+
+
+//Retorna o historico de trades de uma startup em paginação
+
 exports.getTrades = functions
     .region("southamerica-east1")
     .https.onCall(async (data, _context) => {
+
     const startupId = requireString(data.startup_id, "startup_id");
+    //Limita entre 1 e 50 resultados; padrao 20
     const limitVal = typeof data.limit === "number" ? Math.min(Math.max(data.limit, 1), 50) : 20;
+
     let query = startupTradesRef(startupId)
         .orderBy("executed_at", "desc")
         .limit(limitVal);
+
+    //Paginação: se 'after' for passado, busca a partir daquele trade
     if (typeof data.after === "string" && data.after) {
         const afterSnap = await startupTradesRef(startupId).doc(data.after).get();
         if (afterSnap.exists) {
             query = query.startAfter(afterSnap);
         }
     }
+
     const snap = await query.get();
     return {
         success: true,
         trades: snap.docs.map(d => ({ id: d.id, ...d.data() })),
     };
 });
-// ─── Admin: cria a ordem inicial de venda da startup (book primário) ──────────
+
+
+
+// Admin ceria a ordem inicial de venda da startup no mercado primario 
+// com o preço e quantidade de emissao configuradas
+
 exports.inicializarOrdemEmissao = functions
     .region("southamerica-east1")
     .https.onCall(async (data, context) => {
+
     const uid = context.auth?.uid;
     if (!uid)
         throwHttp("unauthenticated", "Usuário não autenticado.");
+
+    //verifica se é admin
     const adminSnap = await db.collection("usuarios").doc(uid).get();
     if (!adminSnap.exists || adminSnap.data()?.isAdmin !== true) {
         throwHttp("permission-denied", "Apenas admin pode inicializar ordem de emissão.");
     }
+
     const startupId = requireString(data.startup_id, "startup_id");
     const startupSnap = await db.collection("startups").doc(startupId).get();
     if (!startupSnap.exists)
         throwHttp("not-found", "Startup não encontrada.");
+
     const config = await readConfig(startupId);
     if (config.tokens_emitidos <= 0 || config.preco_emissao <= 0) {
         throwHttp("failed-precondition", "Config inválida: tokens_emitidos/preco_emissao precisam ser positivos.");
     }
-    // Idempotent: se já existe ordem aberta de startup, não duplica.
+    // Verifica a idepotencia: retorna se ja existe ordem de emissão aberta
     const existing = await startupOrdersRef(startupId)
         .where("seller_type", "==", "startup")
         .where("status", "in", ["aberta", "parcialmente_executada"])
         .limit(1)
         .get();
+
     if (!existing.empty) {
         return { success: false, reason: "ALREADY_EXISTS", order_id: existing.docs[0].id };
     }
     const now = admin.firestore.Timestamp.now();
     const orderRef = startupOrdersRef(startupId).doc();
+
+    //Cria a ordem de venda da startup com todos os tokens disponiveus ao preço de emissao
     await orderRef.set({
         user_id: startupId,
         seller_type: "startup",
@@ -837,6 +1032,7 @@ exports.inicializarOrdemEmissao = functions
     // Inicializa balcao/state se ainda não existir (best_ask = preço de emissão).
     const stateRef = startupBalcaoRef(startupId).doc("state");
     const stateSnap = await stateRef.get();
+    
     if (!stateSnap.exists) {
         await stateRef.set({
             last_price: null,
@@ -854,7 +1050,11 @@ exports.inicializarOrdemEmissao = functions
     }
     return { success: true, order_id: orderRef.id };
 });
-// ─── Internal: update best_bid / best_ask after order changes ─────────────────
+
+//Internal: atualzia best_bid / best_ask após mudanças no orderbook
+
+//recalcula e persiste o melhor preço de compra (best_bid), melhor preço de venda (best_ask)
+// e o spread (diferença entre eles) no estado do balcão
 async function updateBestPrices(startupId) {
     const [bidsSnap, asksSnap] = await Promise.all([
         startupOrdersRef(startupId)
