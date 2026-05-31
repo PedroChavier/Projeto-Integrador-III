@@ -1,10 +1,14 @@
+//Giovana Uchelli - 25008818
+
 import 'package:flutter/material.dart';
 import '../../models/startup.dart';
 
+// Aba de sociedade — exibe sócios, membros e mentores da startup
 class SociedadeTab extends StatelessWidget {
   final Startup? startup;
   const SociedadeTab({super.key, required this.startup});
 
+  // Gera iniciais do nome: "Ana Souza" → "AS"
   String _iniciais(String nome) {
     final partes = nome.trim().split(' ').where((p) => p.isNotEmpty).toList();
     if (partes.isEmpty) return '?';
@@ -21,13 +25,11 @@ class SociedadeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Estrutura Societária ──────────────────────────────
+
+          // Seção: Estrutura Societária (nome + percentual de cada sócio)
           const Text(
             'Estrutura Societária',
-            style: TextStyle(
-                fontSize: 13,
-                color: Colors.black45,
-                fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 13, color: Colors.black45, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 12),
           if (s == null || s.socios.isEmpty)
@@ -35,10 +37,9 @@ class SociedadeTab extends StatelessWidget {
           else
             ListView.separated(
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+              physics: const NeverScrollableScrollPhysics(), // Desativa scroll interno
               itemCount: s.socios.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: Color(0xFFEEEEEE)),
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
               itemBuilder: (_, i) => _SocioItem(
                 nome: s.socios[i].nome,
                 percentual: s.socios[i].percentual,
@@ -47,13 +48,10 @@ class SociedadeTab extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // ── Membros ───────────────────────────────────────────
+          // Seção: Membros da equipe (avatar + nome + cargo)
           const Text(
             'Membros',
-            style: TextStyle(
-                fontSize: 13,
-                color: Colors.black45,
-                fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 13, color: Colors.black45, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 12),
           if (s == null || s.membros.isEmpty)
@@ -74,13 +72,10 @@ class SociedadeTab extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // ── Mentores ──────────────────────────────────────────
+          // Seção: Mentores (mesmo layout que membros)
           const Text(
             'Mentores',
-            style: TextStyle(
-                fontSize: 13,
-                color: Colors.black45,
-                fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 13, color: Colors.black45, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 12),
           if (s == null || s.mentores.isEmpty)
@@ -104,8 +99,7 @@ class SociedadeTab extends StatelessWidget {
   }
 }
 
-// ── Widgets internos ──────────────────────────────────────────────
-
+// Mensagem exibida quando uma seção não tem dados cadastrados
 class _EmptyState extends StatelessWidget {
   final String mensagem;
   const _EmptyState({required this.mensagem});
@@ -114,12 +108,12 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(mensagem,
-          style: const TextStyle(fontSize: 13, color: Colors.black38)),
+      child: Text(mensagem, style: const TextStyle(fontSize: 13, color: Colors.black38)),
     );
   }
 }
 
+// Item de sócio: nome à esquerda e percentual à direita
 class _SocioItem extends StatelessWidget {
   final String nome;
   final String percentual;
@@ -132,55 +126,46 @@ class _SocioItem extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(nome,
-              style: const TextStyle(fontSize: 14, color: Colors.black87)),
-          Text(percentual,
-              style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87)),
+          Text(nome, style: const TextStyle(fontSize: 14, color: Colors.black87)),
+          Text(
+            percentual,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
+          ),
         ],
       ),
     );
   }
 }
 
+// Item de membro/mentor: avatar com iniciais + nome e cargo
 class _MembroItem extends StatelessWidget {
   final String iniciais;
   final String nome;
   final String cargo;
-  const _MembroItem(
-      {required this.iniciais, required this.nome, required this.cargo});
+  const _MembroItem({required this.iniciais, required this.nome, required this.cargo});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        // Avatar circular com iniciais
         Container(
           width: 38,
           height: 38,
-          decoration: const BoxDecoration(
-            color: Color(0xFFD1CEFF),
-            shape: BoxShape.circle,
-          ),
+          decoration: const BoxDecoration(color: Color(0xFFD1CEFF), shape: BoxShape.circle),
           alignment: Alignment.center,
-          child: Text(iniciais,
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF6C63FF))),
+          child: Text(
+            iniciais,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF6C63FF)),
+          ),
         ),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(nome,
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87)),
-            Text(cargo,
-                style: const TextStyle(fontSize: 12, color: Colors.black45)),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
+            Text(cargo, style: const TextStyle(fontSize: 12, color: Colors.black45)),
           ],
         ),
       ],

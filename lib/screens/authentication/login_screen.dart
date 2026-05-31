@@ -1,3 +1,5 @@
+//Giovana Uchelli - 25008818
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -25,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _authService = AuthService();
+    _authService = AuthService(); //inicializa o serviço de autenticação
   }
 
   @override
@@ -39,6 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final senha = _senhaController.text;
 
+    
     if (email.isEmpty || senha.isEmpty) {
       _mostrarErro('Por favor, preencha todos os campos');
       return;
@@ -57,6 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
+      //tenta fazer login no firebase auth
       final userCredential = await _authService.login(
         email: email,
         senha: senha,
@@ -70,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         profile = await _authService.ensureCurrentUserProfile();
 
+        //bloqueia o login se a conta estiver desativada
         if (!profile.userActive) {
           await _authService.signOut();
           _mostrarErro(
@@ -93,8 +98,8 @@ class _LoginScreenState extends State<LoginScreen> {
             return;
           }
 
-          final displayName =
-              _authService.formatDisplayName(profile.fullName);
+          //Monta a saudação com o nome do usuario
+          final displayName =_authService.formatDisplayName(profile.fullName);
           final saudacao = displayName != null
               ? 'Bem-vindo, $displayName${profile.isAdmin ? ' (admin)' : ''}!'
               : 'Bem-vindo, ${userCredential.user?.email}!';
@@ -104,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
           if (mounted) {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const HomeScreen()),
-              (route) => false,
+              (route) => false, //remove todas a rotas anteriores da pilha
             );
           }
         }
@@ -174,9 +179,9 @@ class _LoginScreenState extends State<LoginScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.maybePop(context),
+          onPressed: () => Navigator.maybePop(context), //Volta so se houver tela anterior
         ),
-        bottom: PreferredSize(
+        bottom: PreferredSize( //PreferedSize informa a altura do bottom
           preferredSize: const Size.fromHeight(2),
           child: Container(
             height: 2,
@@ -196,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start, //alinha a esquerda
             children: [
               const Text(
                 'Login',
@@ -223,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 8),
               TextField(
                 controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
+                keyboardType: TextInputType.emailAddress, //Abre o teclado com @ em destaque
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
                 decoration: InputDecoration(
                   hintText: 'seu_email@dominio.com',
@@ -303,6 +308,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.black38,
                       size: 20,
                     ),
+
+                    //alterna a visibiltade da senha
                     onPressed: () =>
                         setState(() => _obscureSenha = !_obscureSenha),
                   ),
@@ -322,7 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         },
-                  child: RichText(
+                  child: RichText( //permite misturar estilos diferentes dentro do mesmo pagrafo
                     text: const TextSpan(
                       text: 'Esqueceu sua senha? ',
                       style: TextStyle(color: Colors.black45, fontSize: 13),

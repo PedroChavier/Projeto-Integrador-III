@@ -1,14 +1,14 @@
+//Giovana Uchelli - 25008818
+
 import 'package:flutter/material.dart';
 import '../home/home_screen.dart';
 
-// ─────────────────────────────────────────────
-// TELA: Saldo Confirmado
-// ─────────────────────────────────────────────
+// Tela de confirmação exibida após adicionar saldo com sucesso
 class SaldoConfirmadoScreen extends StatefulWidget {
   final double valorCreditado;
   final double saldoAnterior;
   final double novoSaldo;
-  final Widget telaRetorno;
+  final Widget telaRetorno; // Tela para onde o botão "Voltar" navega
 
   const SaldoConfirmadoScreen({
     super.key,
@@ -22,18 +22,19 @@ class SaldoConfirmadoScreen extends StatefulWidget {
   State<SaldoConfirmadoScreen> createState() => _SaldoConfirmadoScreenState();
 }
 
+// TickerProviderStateMixin para suportar múltiplos AnimationControllers
 class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
     with TickerProviderStateMixin {
 
-  // Animação do círculo
+  // Animação do círculo verde (desenha o contorno)
   AnimationController? _circleController;
   Animation<double> _circleAnimation = const AlwaysStoppedAnimation(0.0);
 
-  // Animação do check
+  // Animação do checkmark (desenha o traço de confirmação)
   AnimationController? _checkController;
   Animation<double> _checkAnimation = const AlwaysStoppedAnimation(0.0);
 
-  // (mantido, mas não usado no texto)
+  // Controlador de fade (mantido para uso futuro)
   AnimationController? _fadeController;
   Animation<double> _fadeAnimation = const AlwaysStoppedAnimation(0.0);
 
@@ -45,29 +46,21 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _circleAnimation = CurvedAnimation(
-      parent: _circleController!,
-      curve: Curves.easeOut,
-    );
+    _circleAnimation = CurvedAnimation(parent: _circleController!, curve: Curves.easeOut);
 
     _checkController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _checkAnimation = CurvedAnimation(
-      parent: _checkController!,
-      curve: Curves.easeOut,
-    );
+    _checkAnimation = CurvedAnimation(parent: _checkController!, curve: Curves.easeOut);
 
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController!,
-      curve: Curves.easeIn,
-    );
+    _fadeAnimation = CurvedAnimation(parent: _fadeController!, curve: Curves.easeIn);
 
+    // Executa as animações em sequência: círculo → check → fade
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _circleController?.forward();
       await _checkController?.forward();
@@ -83,16 +76,15 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
     super.dispose();
   }
 
+  // Formata valor para "R$ 1.234,56"
   String _formatReal(double valor) =>
       'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
 
+  // Retorna a data e hora atual formatada: "15 mai 2025 - 14:32"
   String _dataAtual() {
     final now = DateTime.now();
-    final meses = [
-      '',
-      'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
-      'jul', 'ago', 'set', 'out', 'nov', 'dez',
-    ];
+    final meses = ['', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+                       'jul', 'ago', 'set', 'out', 'nov', 'dez'];
     final hora = now.hour.toString().padLeft(2, '0');
     final min = now.minute.toString().padLeft(2, '0');
     return '${now.day} ${meses[now.month]} ${now.year} - $hora:$min';
@@ -105,6 +97,7 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
       body: Column(
         children: [
           const SizedBox(height: 20),
+          // Barra decorativa com gradiente
           Container(
             color: const Color.fromARGB(255, 255, 255, 255),
             child: SafeArea(
@@ -113,17 +106,12 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                 height: 2,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF6C63FF),
-                      Color(0xFFE040FB),
-                      Color(0xFFFF6B6B),
-                    ],
+                    colors: [Color(0xFF6C63FF), Color(0xFFE040FB), Color(0xFFFF6B6B)],
                   ),
                 ),
               ),
             ),
           ),
-
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
@@ -132,15 +120,12 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                 children: [
                   const SizedBox(height: 24),
 
-                  // Ícone animado
+                  // Ícone animado: círculo + checkmark desenhados progressivamente
                   SizedBox(
                     width: 80,
                     height: 80,
                     child: AnimatedBuilder(
-                      animation: Listenable.merge([
-                        _circleAnimation,
-                        _checkAnimation,
-                      ]),
+                      animation: Listenable.merge([_circleAnimation, _checkAnimation]),
                       builder: (context, _) {
                         return CustomPaint(
                           painter: _CheckPainter(
@@ -153,7 +138,6 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                   ),
                   const SizedBox(height: 20),
 
-                  // TEXTO SEM ANIMAÇÃO (alteração solicitada)
                   const Text(
                     'Saldo adicionado!',
                     style: TextStyle(
@@ -162,9 +146,9 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                       color: Colors.black87,
                     ),
                   ),
-
                   const SizedBox(height: 36),
 
+                  // Resumo da operação em linhas
                   Column(
                     children: [
                       _LinhaResumo(
@@ -197,6 +181,7 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                         padding: EdgeInsets.symmetric(vertical: 14),
                         child: Divider(height: 1, color: Color(0xFFEEEEEE)),
                       ),
+                      // Novo saldo destacado em roxo e negrito
                       _LinhaResumo(
                         label: 'Novo saldo',
                         valor: _formatReal(widget.novoSaldo),
@@ -208,12 +193,11 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
                         width: double.infinity,
                         height: 50,
                         child: OutlinedButton(
+                          // Remove todas as rotas anteriores e vai direto para telaRetorno
                           onPressed: () {
                             Navigator.pushAndRemoveUntil(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) => widget.telaRetorno,
-                              ),
+                              MaterialPageRoute(builder: (_) => widget.telaRetorno),
                               (route) => false,
                             );
                           },
@@ -246,21 +230,19 @@ class _SaldoConfirmadoScreenState extends State<SaldoConfirmadoScreen>
   }
 }
 
-// ── Painter
+// CustomPainter que desenha o círculo e o checkmark progressivamente
 class _CheckPainter extends CustomPainter {
-  final double circleProgress;
-  final double checkProgress;
+  final double circleProgress; // 0.0 → 1.0: quanto do círculo já foi desenhado
+  final double checkProgress;  // 0.0 → 1.0: quanto do check já foi desenhado
 
-  _CheckPainter({
-    required this.circleProgress,
-    required this.checkProgress,
-  });
+  _CheckPainter({required this.circleProgress, required this.checkProgress});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 3;
 
+    // Desenha o arco do círculo verde de cima para baixo
     final circlePaint = Paint()
       ..color = const Color(0xFF4CAF50)
       ..strokeWidth = 3.0
@@ -269,12 +251,13 @@ class _CheckPainter extends CustomPainter {
 
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      -1.5708,
+      -1.5708, // começa no topo (−π/2)
       2 * 3.14159 * circleProgress,
       false,
       circlePaint,
     );
 
+    // Desenha o checkmark em dois segmentos (p1→p2→p3) conforme o progresso
     if (checkProgress > 0) {
       final checkPaint = Paint()
         ..color = const Color(0xFF4CAF50)
@@ -283,12 +266,12 @@ class _CheckPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
 
+      // Pontos do checkmark em proporção ao tamanho do canvas
       final p1 = Offset(size.width * 0.25, size.height * 0.50);
       final p2 = Offset(size.width * 0.43, size.height * 0.65);
       final p3 = Offset(size.width * 0.73, size.height * 0.35);
 
-      final totalLength =
-          (p2 - p1).distance + (p3 - p2).distance;
+      final totalLength = (p2 - p1).distance + (p3 - p2).distance;
       final drawn = totalLength * checkProgress;
 
       final path = Path();
@@ -297,38 +280,34 @@ class _CheckPainter extends CustomPainter {
       final seg1 = (p2 - p1).distance;
 
       if (drawn <= seg1) {
+        // Ainda no primeiro segmento (p1 → p2)
         final t = drawn / seg1;
-        path.lineTo(
-          p1.dx + (p2.dx - p1.dx) * t,
-          p1.dy + (p2.dy - p1.dy) * t,
-        );
+        path.lineTo(p1.dx + (p2.dx - p1.dx) * t, p1.dy + (p2.dy - p1.dy) * t);
       } else {
+        // Já passou do primeiro segmento, desenha o segundo (p2 → p3)
         path.lineTo(p2.dx, p2.dy);
         final remaining = drawn - seg1;
         final seg2 = (p3 - p2).distance;
         final t = (remaining / seg2).clamp(0.0, 1.0);
-        path.lineTo(
-          p2.dx + (p3.dx - p2.dx) * t,
-          p2.dy + (p3.dy - p2.dy) * t,
-        );
+        path.lineTo(p2.dx + (p3.dx - p2.dx) * t, p2.dy + (p3.dy - p2.dy) * t);
       }
 
       canvas.drawPath(path, checkPaint);
     }
   }
 
+  // Repinta apenas se os valores de progresso mudaram
   @override
   bool shouldRepaint(_CheckPainter old) =>
-      old.circleProgress != circleProgress ||
-      old.checkProgress != checkProgress;
+      old.circleProgress != circleProgress || old.checkProgress != checkProgress;
 }
 
-// ── Linha resumo
+// Linha de resumo reutilizável: label à esquerda, valor à direita
 class _LinhaResumo extends StatelessWidget {
   final String label;
   final String valor;
   final Color valorColor;
-  final bool bold;
+  final bool bold; // Se true, aplica negrito em ambos os lados
 
   const _LinhaResumo({
     required this.label,

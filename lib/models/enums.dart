@@ -1,3 +1,5 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 /// Enum para estágio de desenvolvimento da startup
 enum EstagioDesenvolvimento { nova, emOperacao, emExpansao }
 

@@ -1,3 +1,5 @@
+//Giovana Uchelli - 25008818
+
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -16,17 +18,18 @@ class PerfilScreen extends StatefulWidget {
 
 class _PerfilScreenState extends State<PerfilScreen> {
   bool _2faAtivado = false;
-  final AuthService _authService = AuthService();
-  UserProfile? _perfil;
-  bool _carregando = true;
-  bool _salvandoMfa = false;
+  final AuthService _authService = AuthService(); // Serviço de autenticação
+  UserProfile? _perfil;       // Dados do usuário logado
+  bool _carregando = true;    // Controla o indicador de carregamento
+  bool _salvandoMfa = false;  // Bloqueia o switch enquanto salva
 
   @override
   void initState() {
     super.initState();
-    _carregarPerfil();
+    _carregarPerfil(); // Carrega os dados ao abrir a tela
   }
 
+  // Busca o perfil do usuário no serviço e atualiza o estado
   Future<void> _carregarPerfil() async {
     try {
       final perfil = await _authService.getCurrentUserProfile();
@@ -42,8 +45,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
     }
   }
 
+  // Decide se vai ativar ou desativar o 2FA conforme o valor do switch
   Future<void> _alterarMfa(bool value) async {
-    if (_salvandoMfa) return;
+    if (_salvandoMfa) return; // Ignora se já está salvando
 
     if (value) {
       await _ativarMfaComVerificacao();
@@ -52,12 +56,14 @@ class _PerfilScreenState extends State<PerfilScreen> {
     }
   }
 
+  // Exibe confirmação e redireciona para verificação por SMS/e-mail antes de ativar
   Future<void> _ativarMfaComVerificacao() async {
     final perfil = _perfil;
     if (perfil == null) return;
 
     final telMascarado = _mascararTelefoneDialog(perfil.telefone);
 
+    // Diálogo de confirmação antes de iniciar a verificação
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -80,6 +86,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     if (confirmar != true || !mounted) return;
 
+    // Navega para a tela de verificação; ao concluir, salva o 2FA como ativo
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SmsEmailVerificationScreen(
@@ -101,6 +108,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
     );
   }
 
+  // Exibe confirmação e desativa o 2FA, revertendo em caso de erro
   Future<void> _desativarMfa() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -116,10 +124,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(
-              'Desativar',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Desativar', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -127,7 +132,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     if (confirmar != true || !mounted) return;
 
-    final estadoAnterior = _2faAtivado;
+    final estadoAnterior = _2faAtivado; // Guarda estado para reverter se falhar
     setState(() {
       _salvandoMfa = true;
       _2faAtivado = false;
@@ -147,7 +152,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
       debugPrint('[PerfilScreen] Falha ao desativar 2FA: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
-      setState(() => _2faAtivado = estadoAnterior);
+      setState(() => _2faAtivado = estadoAnterior); // Reverte o switch em caso de erro
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Nao foi possivel atualizar a autenticacao 2FA.'),
@@ -155,10 +160,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _salvandoMfa = false);
+      if (mounted) setState(() => _salvandoMfa = false); // Libera o switch
     }
   }
 
+  // Mascara o telefone para exibir no diálogo: "(11) *****-89"
   String _mascararTelefoneDialog(String telefone) {
     final d = telefone.replaceAll(RegExp(r'[^0-9]'), '');
     if (d.length < 10) return telefone.isNotEmpty ? telefone : 'cadastrado';
@@ -167,7 +173,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
     return '($ddd) *****-$fim';
   }
 
-  // Gera as iniciais do nome (ex: "Ana Souza" → "AS")
+  // Gera as iniciais do nome: "Ana Souza" → "AS"
   String _iniciais(String? nome) {
     if (nome == null || nome.trim().isEmpty) return '';
     final partes = nome.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -175,7 +181,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
     return '${partes[0][0]}${partes[1][0]}'.toUpperCase();
   }
 
-  // Formata telefone: "11999781289" → "(11) 99978-1289"
+  // Formata o telefone: "11999781289" → "(11) 99978-1289"
   String _formatarTelefone(String? tel) {
     if (tel == null || tel.isEmpty) return '-';
     final d = tel.replaceAll(RegExp(r'[^0-9]'), '');
@@ -186,6 +192,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Prepara os dados para exibição
     final nome = _perfil?.fullName ?? '';
     final email = _perfil?.email ?? '';
     final telefone = _formatarTelefone(_perfil?.telefone);
@@ -195,6 +202,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
       backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: Column(
         children: [
+          // Cabeçalho com gradiente, botão voltar e título
           Container(
             color: Colors.white,
             child: SafeArea(
@@ -203,6 +211,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
+                  // Barra decorativa com gradiente no topo
                   Container(
                     height: 2,
                     decoration: const BoxDecoration(
@@ -236,18 +245,22 @@ class _PerfilScreenState extends State<PerfilScreen> {
               ),
             ),
           ),
+
           Expanded(
             child: _carregando
+                // Exibe loading enquanto os dados não chegaram
                 ? const Center(child: CircularProgressIndicator())
                 : SingleChildScrollView(
                     child: Column(
                       children: [
+                        // Seção do avatar com iniciais e nome do usuário
                         Container(
                           width: double.infinity,
                           color: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 28),
                           child: Column(
                             children: [
+                              // Círculo com iniciais (ou ícone padrão se não houver nome)
                               Container(
                                 width: 84,
                                 height: 84,
@@ -283,15 +296,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 email,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.black45,
-                                ),
+                                style: const TextStyle(fontSize: 13, color: Colors.black45),
                               ),
                             ],
                           ),
                         ),
+
                         const SizedBox(height: 10),
+
+                        // Seção: dados da conta (nome e telefone)
                         Container(
                           width: double.infinity,
                           color: Colors.white,
@@ -316,7 +329,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             ],
                           ),
                         ),
+
                         const SizedBox(height: 10),
+
+                        // Seção: segurança (2FA e alterar senha)
                         Container(
                           width: double.infinity,
                           color: Colors.white,
@@ -335,6 +351,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                 ),
                               ),
                               const Divider(height: 1, color: Color(0xFFEEEEEE)),
+
+                              // Switch para ativar/desativar autenticação em dois fatores
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                                 child: Row(
@@ -352,7 +370,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                       scale: 0.85,
                                       child: Switch(
                                         value: _2faAtivado,
-                                        onChanged: _salvandoMfa ? null : _alterarMfa,
+                                        onChanged: _salvandoMfa ? null : _alterarMfa, // Desabilitado enquanto salva
                                         activeColor: Colors.white,
                                         activeTrackColor: const Color(0xFF9E9E9E),
                                         inactiveThumbColor: Colors.white,
@@ -364,6 +382,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                 ),
                               ),
                               const Divider(height: 1, indent: 16, color: Color(0xFFEEEEEE)),
+
+                              // Botão para ir à tela de recuperação/alteração de senha
                               GestureDetector(
                                 onTap: () {
                                   Navigator.push(
@@ -386,10 +406,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                           color: Colors.black87,
                                         ),
                                       ),
-                                      Text(
-                                        '>',
-                                        style: TextStyle(fontSize: 16, color: Colors.black45),
-                                      ),
+                                      Text('>', style: TextStyle(fontSize: 16, color: Colors.black45)),
                                     ],
                                   ),
                                 ),
@@ -397,11 +414,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             ],
                           ),
                         ),
+
                         const SizedBox(height: 28),
+
+                        // Botão de logout — faz o signOut e volta para o SplashScreen
                         GestureDetector(
                           onTap: () async {
                             await _authService.signOut();
                             if (!context.mounted) return;
+                            // Remove todas as rotas anteriores da pilha
                             Navigator.of(context).pushAndRemoveUntil(
                               MaterialPageRoute(builder: (_) => const SplashScreen()),
                               (route) => false,
@@ -423,11 +444,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 0), // Barra de navegação inferior
     );
   }
 }
 
+// Widget reutilizável para exibir uma linha de informação (label + valor)
 class _LinhaInfo extends StatelessWidget {
   final String label;
   final String valor;

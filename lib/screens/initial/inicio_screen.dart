@@ -1,9 +1,11 @@
+//Giovana Uchelli - 25008818
 import 'package:flutter/material.dart';
-//importa somnete o widget MesclaInvestLogo
+// Importa as telas de login e cadastro
 import '../authentication/login_screen.dart';
 import '../authentication/register_screen.dart';
 
 
+// Tela inicial do app — não tem estado, por isso StatelessWidget
 class InicioScreen extends StatelessWidget {
   const InicioScreen({super.key});
 
@@ -12,30 +14,38 @@ class InicioScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      //SafeArea evita que o conteudo fique em areas problematicas
+      // SafeArea evita que o conteúdo fique em áreas problemáticas (notch, barra de status)
       body: SafeArea(
         child: Padding(
+          // Espaçamento horizontal de 32px dos dois lados
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             children: [
+              // Espaço flexível acima da logo
               const Spacer(flex: 2),
+
+              // Logo do app com altura proporcional à tela
               Image.asset(
                 'assets/logo.png',
                 height: MediaQuery.of(context).size.height * 0.15,
               ),
+
+              // Espaço flexível entre a logo e os botões
               const Spacer(flex: 3),
+
+              // Botão "Entrar" — navega para a tela de login
               OutlinedButton(
                 onPressed: () {
-                  Navigator.push( 
+                  Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                   );
                 },
                 style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
-                  side: const BorderSide(color: Colors.black26),
+                  minimumSize: const Size(double.infinity, 52), // Largura total, altura 52px
+                  side: const BorderSide(color: Colors.black26), // Borda cinza clara
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(8), // Cantos arredondados
                   ),
                 ),
                 child: const Text(
@@ -43,8 +53,11 @@ class InicioScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 16, color: Colors.black87),
                 ),
               ),
-              //espaço fixo de 16 px entre os elemnetos
+
+              // Espaço fixo de 16px entre os elementos
               const SizedBox(height: 16),
+
+              // Divisor visual com texto "ou" no meio
               Row(
                 children: const [
                   Expanded(child: Divider()),
@@ -55,14 +68,16 @@ class InicioScreen extends StatelessWidget {
                   Expanded(child: Divider()),
                 ],
               ),
+
               const SizedBox(height: 16),
+
+              // Botão "Criar Conta" — navega para a tela de cadastro
               OutlinedButton(
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const CadastroScreen()),
                   );
-                  // TODO: navegar para cadastro
                 },
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 52),
@@ -76,6 +91,8 @@ class InicioScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 16, color: Colors.black87),
                 ),
               ),
+
+              // Espaço flexível abaixo dos botões
               const Spacer(),
             ],
           ),

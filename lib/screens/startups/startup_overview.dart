@@ -1,16 +1,21 @@
+//Giovana Uchelli - 25008818
+
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher.dart'; 
 import '../../models/startup.dart';
 
+// Aba "Visão Geral" da startup — exibe descrição, métricas, lock-up e vídeo
 class VisaoGeralTab extends StatelessWidget {
   final Startup? startup;
 
   const VisaoGeralTab({super.key, this.startup});
 
-  static const _ink = Color(0xFF121212);
-  static const _muted = Color(0xFF6E6E73);
-  static const _accent = Color(0xFF173B7A);
+  // Cores fixas usadas em toda a aba
+  static const _ink    = Color(0xFF121212); // texto principal
+  static const _muted  = Color(0xFF6E6E73); // texto secundário
+  static const _accent = Color(0xFF173B7A); // azul de destaque
 
+  // Abre o vídeo da startup no YouTube (app externo)
   Future<void> _abrirYoutube() async {
     final url = startup?.videoUrl;
     if (url == null || url.isEmpty) return;
@@ -20,12 +25,14 @@ class VisaoGeralTab extends StatelessWidget {
     }
   }
 
+  // Formata valores monetários: 1500000 → "R$ 1.5M", 3000 → "R$ 3K"
   String _formatarValor(double valor) {
     if (valor >= 1000000) return 'R\$ ${(valor / 1000000).toStringAsFixed(1)}M';
     if (valor >= 1000) return 'R\$ ${(valor / 1000).toStringAsFixed(0)}K';
     return 'R\$ ${valor.toStringAsFixed(2)}';
   }
 
+  // Formata quantidade de tokens: 2000 → "2K", 1000000 → "1M"
   String _formatarTokens(int valor) {
     if (valor >= 1000000) return '${(valor / 1000000).toStringAsFixed(1)}M';
     if (valor >= 1000) return '${(valor / 1000).toStringAsFixed(0)}K';
@@ -42,12 +49,14 @@ class VisaoGeralTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Descrição da startup
           Text(
             s?.descricao ?? '',
-            style: const TextStyle(
-                fontSize: 13.5, color: Colors.black54, height: 1.6),
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54, height: 1.6),
           ),
           const SizedBox(height: 20),
+
+          // Primeira linha de métricas: Tokens Emitidos e Preço Atual
           Row(
             children: [
               _MetricaBox(
@@ -61,8 +70,8 @@ class VisaoGeralTab extends StatelessWidget {
                 valor: s == null
                     ? '-'
                     : 'R\$ ${s.precoToken.toStringAsFixed(2).replaceAll('.', ',')}',
-                subvalor: s != null && s.precoEmissao > 0 &&
-                        s.precoToken != s.precoEmissao
+                // Mostra preço de emissão abaixo se for diferente do preço atual
+                subvalor: s != null && s.precoEmissao > 0 && s.precoToken != s.precoEmissao
                     ? 'emissão R\$ ${s.precoEmissao.toStringAsFixed(2).replaceAll('.', ',')}'
                     : null,
                 subColor: _muted,
@@ -71,6 +80,8 @@ class VisaoGeralTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Segunda linha de métricas: Investidores e Capital Captado
           Row(
             children: [
               _MetricaBox(
@@ -86,19 +97,23 @@ class VisaoGeralTab extends StatelessWidget {
               ),
             ],
           ),
+
+          // Barra de progresso da emissão (só exibe se há tokens emitidos)
           if (s != null && s.totalTokensEmitidos > 0) ...[
             const SizedBox(height: 20),
             _buildProgressoEmissao(s),
           ],
+
+          // Seção de lock-up (restrição de venda de tokens)
           if (s != null) ..._buildLockupSection(s),
+
           const SizedBox(height: 24),
+
+          // Thumbnail clicável do vídeo demonstrativo (só exibe se tem URL)
           if (temVideo) ...[
             const Text(
               'Video Demonstrativo',
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
             ),
             const SizedBox(height: 10),
             GestureDetector(
@@ -112,7 +127,8 @@ class VisaoGeralTab extends StatelessWidget {
                     alignment: Alignment.center,
                     fit: StackFit.expand,
                     children: [
-                      Container(color: Colors.black),
+                      Container(color: Colors.black), // fundo preto simulando thumbnail
+                      // Botão de play centralizado
                       Center(
                         child: Container(
                           width: 56,
@@ -120,23 +136,18 @@ class VisaoGeralTab extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
-                            border:
-                                Border.all(color: Colors.white54, width: 1.5),
+                            border: Border.all(color: Colors.white54, width: 1.5),
                           ),
-                          child: const Icon(
-                            Icons.play_arrow,
-                            color: Colors.white,
-                            size: 32,
-                          ),
+                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 32),
                         ),
                       ),
+                      // Nome da startup no canto inferior esquerdo
                       Positioned(
                         bottom: 8,
                         left: 12,
                         child: Text(
                           s?.nome != null ? '${s!.nome} - Demo' : 'Demo',
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.white70),
+                          style: const TextStyle(fontSize: 11, color: Colors.white70),
                         ),
                       ),
                     ],
@@ -151,9 +162,9 @@ class VisaoGeralTab extends StatelessWidget {
     );
   }
 
+  // Barra de progresso mostrando tokens vendidos vs emitidos
   Widget _buildProgressoEmissao(Startup s) {
-    final progress =
-        (s.tokensVendidos / s.totalTokensEmitidos).clamp(0.0, 1.0);
+    final progress = (s.tokensVendidos / s.totalTokensEmitidos).clamp(0.0, 1.0);
     final pct = (progress * 100).toStringAsFixed(1);
 
     return Column(
@@ -163,14 +174,13 @@ class VisaoGeralTab extends StatelessWidget {
           children: [
             const Text(
               'Progresso da emissão',
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: _muted),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _muted),
             ),
             const Spacer(),
+            // Exibe "X vendidos / Y emitidos · Z%"
             Text(
               '${_formatarTokens(s.tokensVendidos)} / ${_formatarTokens(s.totalTokensEmitidos)} · $pct%',
-              style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w600, color: _ink),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _ink),
             ),
           ],
         ),
@@ -188,32 +198,35 @@ class VisaoGeralTab extends StatelessWidget {
     );
   }
 
+  // Monta os cards de lock-up (por valor e/ou por tempo), se configurados
   List<Widget> _buildLockupSection(Startup s) {
-    final hasQtd =
-        s.lockupQuantidadeTipo != null && s.lockupQuantidadeValor > 0;
+    final hasQtd   = s.lockupQuantidadeTipo != null && s.lockupQuantidadeValor > 0;
     final hasTempo = s.lockupDiasMinimo > 0;
-    if (!hasQtd && !hasTempo) return [];
+    if (!hasQtd && !hasTempo) return []; // Sem lock-up, não exibe nada
 
     final widgets = <Widget>[
       const SizedBox(height: 20),
+      // Título da seção com ícone de cadeado
       Row(
         children: const [
           Icon(Icons.lock_outline, size: 13, color: _muted),
           SizedBox(width: 4),
           Text(
             'Lock-up',
-            style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w700, color: _muted),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _muted),
           ),
         ],
       ),
       const SizedBox(height: 8),
     ];
 
+    // Card de lock-up por quantidade de tokens vendidos
     if (hasQtd) {
       final vendidos = s.tokensVendidos;
       final int required;
       final String metaLabel;
+
+      // Calcula a meta em tokens (por percentual ou valor absoluto)
       if (s.lockupQuantidadeTipo == 'percentual') {
         required = (s.lockupQuantidadeValor * s.totalTokensEmitidos).ceil();
         final pct = (s.lockupQuantidadeValor * 100).toStringAsFixed(0);
@@ -222,11 +235,11 @@ class VisaoGeralTab extends StatelessWidget {
         required = s.lockupQuantidadeValor.toInt();
         metaLabel = 'meta: ${_formatarTokens(required)} ${s.sigla} vendidos';
       }
+
       final percorrido = vendidos.clamp(0, required);
-      final falta = (required - percorrido).clamp(0, required);
-      final progress =
-          required > 0 ? (percorrido / required).clamp(0.0, 1.0) : 1.0;
-      final unlocked = falta == 0;
+      final falta      = (required - percorrido).clamp(0, required);
+      final progress   = required > 0 ? (percorrido / required).clamp(0.0, 1.0) : 1.0;
+      final unlocked   = falta == 0;
 
       widgets.add(_LockupCard(
         icon: Icons.bar_chart_rounded,
@@ -234,34 +247,32 @@ class VisaoGeralTab extends StatelessWidget {
         subtitle: metaLabel,
         progress: progress,
         unlocked: unlocked,
-        percorridoLabel:
-            '${_formatarTokens(percorrido)} ${s.sigla} vendidos',
-        faltaLabel: unlocked
-            ? 'Desbloqueado'
-            : 'Faltam ${_formatarTokens(falta)} ${s.sigla}',
+        percorridoLabel: '${_formatarTokens(percorrido)} ${s.sigla} vendidos',
+        faltaLabel: unlocked ? 'Desbloqueado' : 'Faltam ${_formatarTokens(falta)} ${s.sigla}',
       ));
     }
 
+    // Card de lock-up por tempo desde o lançamento
     if (hasTempo) {
       final lancamento = s.dataLancamento;
-      final totalDias = s.lockupDiasMinimo;
+      final totalDias  = s.lockupDiasMinimo;
       double? tempoProgress;
       bool tempoUnlocked = false;
       String percorridoLabel;
       String faltaLabel;
 
       if (lancamento != null) {
-        final diasDecorridos =
-            DateTime.now().difference(lancamento).inDays.clamp(0, totalDias);
-        final diasFaltando = totalDias - diasDecorridos;
-        tempoProgress = (diasDecorridos / totalDias).clamp(0.0, 1.0);
-        tempoUnlocked = diasFaltando == 0;
+        // Calcula dias decorridos desde o lançamento
+        final diasDecorridos = DateTime.now().difference(lancamento).inDays.clamp(0, totalDias);
+        final diasFaltando   = totalDias - diasDecorridos;
+        tempoProgress  = (diasDecorridos / totalDias).clamp(0.0, 1.0);
+        tempoUnlocked  = diasFaltando == 0;
         percorridoLabel = '$diasDecorridos de $totalDias dias decorridos';
-        faltaLabel =
-            tempoUnlocked ? 'Desbloqueado' : 'Faltam $diasFaltando dias';
+        faltaLabel      = tempoUnlocked ? 'Desbloqueado' : 'Faltam $diasFaltando dias';
       } else {
+        // Data de lançamento ainda não definida pela startup
         percorridoLabel = 'carência de $totalDias dias por compra';
-        faltaLabel = 'data de lançamento não definida';
+        faltaLabel      = 'data de lançamento não definida';
       }
 
       widgets.add(_LockupCard(
@@ -279,11 +290,12 @@ class VisaoGeralTab extends StatelessWidget {
   }
 }
 
+// Card visual de lock-up — verde se desbloqueado, amarelo se ainda bloqueado
 class _LockupCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final double? progress;
+  final double? progress;   // null se a data de lançamento não está definida
   final bool unlocked;
   final String percorridoLabel;
   final String faltaLabel;
@@ -300,15 +312,12 @@ class _LockupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent =
-        unlocked ? const Color(0xFF2E7D32) : const Color(0xFFB8860B);
-    final bg = unlocked ? const Color(0xFFF0F7F3) : const Color(0xFFFFF8E1);
-    final borderColor =
-        unlocked ? const Color(0xFFA5D6A7) : const Color(0xFFFFE082);
-    final barColor =
-        unlocked ? const Color(0xFF2E7D32) : const Color(0xFFFFB300);
-    final textStrong =
-        unlocked ? const Color(0xFF1B5E20) : const Color(0xFF7B5800);
+    // Cores mudam conforme o status: verde = desbloqueado, amarelo = bloqueado
+    final accent      = unlocked ? const Color(0xFF2E7D32) : const Color(0xFFB8860B);
+    final bg          = unlocked ? const Color(0xFFF0F7F3) : const Color(0xFFFFF8E1);
+    final borderColor = unlocked ? const Color(0xFFA5D6A7) : const Color(0xFFFFE082);
+    final barColor    = unlocked ? const Color(0xFF2E7D32) : const Color(0xFFFFB300);
+    final textStrong  = unlocked ? const Color(0xFF1B5E20) : const Color(0xFF7B5800);
 
     return Container(
       width: double.infinity,
@@ -322,29 +331,26 @@ class _LockupCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Cabeçalho do card: ícone, título e subtítulo
           Row(
             children: [
               Icon(icon, size: 13, color: accent),
               const SizedBox(width: 5),
               Text(
                 title,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: accent),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: accent),
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   subtitle,
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: accent.withValues(alpha: 0.75)),
+                  style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.75)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
+          // Barra de progresso (omitida se não há data definida)
           if (progress != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
@@ -358,21 +364,18 @@ class _LockupCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 6),
+          // Rodapé: progresso à esquerda, status ("Faltam X dias") à direita
           Row(
             children: [
               Expanded(
                 child: Text(
                   percorridoLabel,
-                  style: TextStyle(
-                      fontSize: 10, color: accent.withValues(alpha: 0.8)),
+                  style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.8)),
                 ),
               ),
               Text(
                 faltaLabel,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: textStrong),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textStrong),
               ),
             ],
           ),
@@ -382,10 +385,11 @@ class _LockupCard extends StatelessWidget {
   }
 }
 
+// Card de métrica reutilizável (tokens, preço, investidores, captado)
 class _MetricaBox extends StatelessWidget {
   final String label;
   final String valor;
-  final String? subvalor;
+  final String? subvalor; // Valor secundário opcional (ex: preço de emissão)
   final Color? subColor;
   final IconData icon;
 
@@ -418,6 +422,7 @@ class _MetricaBox extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Ícone com fundo azul claro
               Container(
                 width: 34,
                 height: 34,
@@ -428,27 +433,21 @@ class _MetricaBox extends StatelessWidget {
                 child: Icon(icon, color: const Color(0xFF1A237E), size: 18),
               ),
               const SizedBox(width: 10),
+              // Label, valor principal e subvalor opcional
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(label,
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: Color.fromARGB(169, 0, 0, 0))),
+                        style: const TextStyle(fontSize: 11, color: Color.fromARGB(169, 0, 0, 0))),
                     const SizedBox(height: 2),
                     Text(valor,
                         style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87)),
+                            fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87)),
                     if (subvalor != null)
                       Text(subvalor!,
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: subColor)),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: subColor)),
                   ],
                 ),
               ),

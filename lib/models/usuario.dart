@@ -1,7 +1,10 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'pessoa.dart';
 
+//Representa um usuario autenticado da plaforma
 class Usuario extends Pessoa {
   String? _uid;
   String? _email;
@@ -25,6 +28,7 @@ class Usuario extends Pessoa {
         _userActive = userActive,
         super(cpf: cpf, fullName: fullName, dataNascimento: dataNascimento);
 
+  //Transforma um objeto firestore para dart
   factory Usuario.fromMap(Map<String, dynamic> map) {
     final rawDataNascimento = map['dataNascimento'];
     DateTime? dataNascimento;
@@ -49,18 +53,21 @@ class Usuario extends Pessoa {
     );
   }
 
+  //Getters para ler os atributos privados
   String? get uid => _uid;
   String? get email => _email;
   String? get telefone => _telefone;
   bool get mfaHabilitado => _mfaHabilitado;
   bool get userActive => _userActive;
 
+  //setters para alterar os atributos priavdos
   set uid(String? value) => _uid = value;
   set userActive(bool value) => _userActive = value;
   set email(String? value) => _email = value;
   set telefone(String? value) => _telefone = value;
   set mfaHabilitado(bool value) => _mfaHabilitado = value;
 
+  //Tranforma em um map compativel com o firestore
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
       'uid': _uid,
@@ -68,7 +75,7 @@ class Usuario extends Pessoa {
       'fullName': fullName,
       'dataNascimento': dataNascimento == null
           ? null
-          : Timestamp.fromDate(dataNascimento!.toUtc()),
+          : Timestamp.fromDate(dataNascimento!.toUtc()), //Utc -> horario universal
       'email': _email,
       'telefone': _telefone,
       'mfaHabilitado': _mfaHabilitado,

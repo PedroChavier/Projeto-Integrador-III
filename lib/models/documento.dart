@@ -1,52 +1,44 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; //Pacote do firestore
 
+// Modelo que representa um documento (pitch, contrato, etc.) de uma startup
 class Documento {
-  //Atributos da classe
   final String id;
-  final String tipo;
+  final String tipo;       // ex: "pitch", "contrato", "relatorio"
   final String titulo;
   final String descricao;
-  final String url;
-  final DateTime? updatedAt; //Data da ultima atualização
+  final String url;        // link para o arquivo no Storage
+  final DateTime? updatedAt;
 
   Documento({
-    //required indica campos obrigatorios
     required this.id,
     required this.tipo,
     required this.titulo,
     required this.descricao,
     required this.url,
-    this.updatedAt,
+    this.updatedAt, // opcional — nem todo doc tem data de atualização
   });
 
-  /// factory = converte dados do firestore em objeto
-  /// Firestore devolve os dados em formato map
-  /// Esse método transforma o Map em objeto documento
+  // Converte um documento do Firestore em objeto Dart
+  // O id vem separado do data() porque o Firestore armazena assim
   factory Documento.fromFirestore(String id, Map<String, dynamic> data) {
     return Documento(
-      //Id nao fica dentro do data(), ele vem separado
-      id: id, 
-
-      //pega o tipo, tenta converter para String, se vier null -> usa ''
+      id: id,
       tipo: data['tipo'] as String? ?? '',
       titulo: data['titulo'] as String? ?? '',
       descricao: data['descricao'] as String? ?? '',
       url: data['url'] as String? ?? '',
-      //convertemos de timestamp para DateTime
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(), // Timestamp do Firestore → DateTime do Dart
     );
   }
 
-  //converte o objeto para um map (Firebase consegue salvar)
+  // Converte o objeto em Map para salvar no Firestore
   Map<String, dynamic> toMap() {
     return {
       'tipo': tipo,
       'titulo': titulo,
       'descricao': descricao,
       'url': url,
-
-      //faz o Firestore pegar a data automaticamente usando o horario do servidor
-      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(), // usa o relógio do servidor, não do celular
     };
   }
 }

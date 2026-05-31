@@ -1,3 +1,5 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 class Pessoa {
   String? _cpf;
   String? _fullName;
@@ -11,10 +13,12 @@ class Pessoa {
        _fullName = fullName,
        _dataNascimento = dataNascimento;
 
+  //Getters -> leitura dos atributos privados
   String? get cpf => _cpf;
   String? get fullName => _fullName;
   DateTime? get dataNascimento => _dataNascimento;
 
+  //setters -> alteração dos atributos privados
   set cpf(String? value) => _cpf = value;
   set fullName(String? value) => _fullName = value;
   set dataNascimento(DateTime? value) => _dataNascimento = value;
@@ -27,6 +31,7 @@ class Pessoa {
 
   DateTime? getDataNascimento() => _dataNascimento;
   void setDataNascimento(DateTime? value) => _dataNascimento = value;
+
 
   int calcularIdade() {
     if (_dataNascimento == null) return 0;
@@ -45,16 +50,18 @@ class Pessoa {
 
     return idade;
   }
+
   bool validarCpf() {
     if (_cpf == null || _cpf!.trim().isEmpty) return false;
 
     final cpfNormalizado = _cpf!
         .trim()
         .toUpperCase()
-        .replaceAll(RegExp(r'[^0-9X]'), '');
+        .replaceAll(RegExp(r'[^0-9X]'), ''); //So aceita numeros
+
     if (cpfNormalizado.length != 11) return false;
-    if (!RegExp(r'^\d{10}[\dX]$').hasMatch(cpfNormalizado)) return false;
-    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpfNormalizado)) return false;
+    if (!RegExp(r'^\d{10}[\dX]$').hasMatch(cpfNormalizado)) return false; //Garante que os 10 primeiros caracteres sejam digitos e o ultimo X
+    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpfNormalizado)) return false; //Receita sequencia sinvalidas (000000000)
 
     return true;
   }

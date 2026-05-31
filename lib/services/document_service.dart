@@ -1,3 +1,5 @@
+//Giovana Uchelli - 25008818
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/documento.dart';
@@ -58,7 +60,9 @@ class DocumentoService {
   // Tenta primeiro no mapa embutido
   final snap = await _db.collection('startups').doc(startupId).get();
   final docMap = snap.data()?['documentos'];
+
   if (docMap is Map) {
+    //percorre cada chave + valor do mapa vindo do Firestore
     for (final e in docMap.entries.cast<MapEntry<dynamic, dynamic>>()) {
       if (e.key == 'relatorio_financeiro' && e.value is Map) {
         return Documento.fromFirestore(

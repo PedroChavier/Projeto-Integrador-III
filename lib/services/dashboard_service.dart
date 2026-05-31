@@ -1,15 +1,16 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/wallet_holding.dart';
 import 'balcao_service.dart';
 
-/// Ponto de preço de um token no tempo (um trade do balcão).
+/// Representa o preço de um token em um momento especifico
 typedef PricePoint = ({double price, DateTime at});
 
-/// Uma ordem do investidor já confirmada como `executada`, usada para
-/// reconstruir custo de aquisição e a quantidade de tokens possuída ao
-/// longo do tempo (req. 5.4 — cálculo sobre transações registradas).
+/// Representa uma ordem ja executada do investidor
+/// Usada para reconstruir o custo de aquisição e a quantidade de tokens
 class OrderExecution {
   final String startupId;
   final String side; // 'buy' | 'sell'
@@ -26,10 +27,11 @@ class OrderExecution {
   });
 }
 
-/// Camada de dados do Dashboard. Reutiliza [BalcaoService] para as posições
-/// e adiciona as leituras necessárias para reconstruir a evolução do
-/// patrimônio a partir do histórico de ordens e dos trades das startups.
+/// Serviço de dados do dashboard
+/// Reutiliza BalcoService para posições
 class DashboardService {
+
+  //Permite injetar dependencias custumizadas nos testes
   DashboardService({
     BalcaoService? balcaoService,
     FirebaseFirestore? db,
@@ -47,9 +49,7 @@ class DashboardService {
   /// Stream principal: holdings com preços atuais (delegado ao BalcaoService).
   Stream<List<WalletHolding>> watchHoldings() => _balcaoService.watchHoldings();
 
-  /// Lê o histórico de ordens do usuário e devolve apenas as `executada`,
-  /// com o instante real de execução (último `status_changes` com status
-  /// `executada`, ou `created_at` como fallback).
+  /// Busca o historico de ordens do usuario e retorna as executadas
   Future<List<OrderExecution>> fetchExecutions() async {
     final uid = _uid;
     if (uid == null) return const [];
@@ -65,10 +65,11 @@ class DashboardService {
     for (final doc in snap.docs) {
       final d = doc.data();
 
-      // Resolve último status e o instante da execução.
+      // Percorre o historico de mundanças de status
       final changes = (d['status_changes'] as List?) ?? const [];
       var lastStatus = 'aberta';
       DateTime? executedAt;
+
       for (final c in changes) {
         if (c is! Map) continue;
         final s = c['status'] as String?;
@@ -77,6 +78,8 @@ class DashboardService {
           executedAt = (c['at'] as Timestamp).toDate();
         }
       }
+
+      //Ignora as ordens que nao foram executadas
       if (lastStatus != 'executada') continue;
 
       final startupId = (d['startup_id'] as String?) ?? '';
@@ -88,6 +91,7 @@ class DashboardService {
         side: (d['side'] as String?) ?? 'buy',
         price: (d['price'] as num?)?.toDouble() ?? 0,
         qty: qty,
+        //
         executedAt:
             executedAt ?? (d['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
       ));
@@ -95,12 +99,13 @@ class DashboardService {
     return out;
   }
 
-  /// Custo de aquisição por startup: soma das compras menos as vendas
-  /// executadas (`price * qty`). Chave = `startupId`.
+  /// Calcula o custo de aquisição por startup
   Map<String, double> custoPorStartup(List<OrderExecution> execs) {
     final m = <String, double>{};
     for (final e in execs) {
       final delta = e.price * e.qty;
+
+      //compra aumenta o custo, venda diminui
       m[e.startupId] = (m[e.startupId] ?? 0) + (e.side == 'buy' ? delta : -delta);
     }
     return m;
@@ -112,8 +117,7 @@ class DashboardService {
         (s, e) => s + (e.side == 'buy' ? e.price * e.qty : -e.price * e.qty),
       );
 
-  /// Trades de uma startup (preço × instante), em ordem crescente de tempo,
-  /// para reconstruir o preço do token ao longo do período do gráfico.
+  /// Busca todos os negocios realizados de uma startup em ordem cronologica
   Future<List<PricePoint>> fetchTrades(String startupId) async {
     final snap = await _db
         .collection('startups')
@@ -127,6 +131,7 @@ class DashboardService {
       final d = doc.data();
       final price = (d['price'] as num?)?.toDouble();
       final ts = d['executed_at'];
+      
       if (price == null || ts is! Timestamp) continue;
       out.add((price: price, at: ts.toDate()));
     }

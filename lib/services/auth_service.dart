@@ -1,12 +1,17 @@
-import 'dart:async';
+//Pedro Andre do Carmo Chavier -25018639
 
+import 'dart:async'; //Fornece o completer, usado para converter callbacks em futures
+
+//Banco e functions do firebase
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart'; //autenticação dos usuarios via Firebase
+
+import 'package:flutter/foundation.dart'; //utilitarios do flutter, como debugPrint
 import '../models/wallet_transaction.dart';
 import '../models/user_profile.dart';
 
+//Serviço central de autenticaçãi e perfil do usuario
 class AuthService {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
       : _auth = auth ?? FirebaseAuth.instance,
@@ -14,10 +19,12 @@ class AuthService {
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  //Aponta para a região de Sao Paulo
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: 'southamerica-east1',
   );
 
+  //Monta um Map para um novo perfil
   Map<String, dynamic> _buildDefaultUserProfilePayload(User user) {
     final fallbackName = user.displayName?.trim() ?? '';
     final fallbackEmail = user.email?.trim().toLowerCase() ?? '';
@@ -153,6 +160,7 @@ class AuthService {
     return _auth.signOut();
   }
 
+  //Buscao o nome completo do usuario
   Future<String?> getUserFullName(String uid) async {
     try {
       final snapshot = await _firestore.collection('usuarios').doc(uid).get();
@@ -163,10 +171,12 @@ class AuthService {
 
       final fullName = value.trim();
       return fullName.isEmpty ? null : fullName;
+
     } on FirebaseException catch (e) {
       debugPrint('[AuthService] getUserFullName permission error: '
           'code=${e.code}, message=${e.message}');
-      rethrow;
+      rethrow; //Relança a mesma exceção recebida 
+
     }
   }
 
@@ -195,8 +205,9 @@ class AuthService {
       return '$primeiroNome $ultimoNome';
     }
 
+    
     final restantesAbreviados =
-        partes.skip(1).map((parte) => '${parte[0].toUpperCase()}.').join(' ');
+        partes.skip(1).map((parte) => '${parte[0].toUpperCase()}.').join(' '); //skip(1) ignora o primeiro elemento
 
     return '$primeiroNome $restantesAbreviados';
   }
@@ -206,6 +217,7 @@ class AuthService {
     return formatDisplayName(fullName);
   }
 
+  //Busca o perfil completo do usuario
   Future<UserProfile?> getUserProfile(String uid) async {
     try {
       final snapshot = await _firestore.collection('usuarios').doc(uid).get();
@@ -220,16 +232,18 @@ class AuthService {
       debugPrint(
         '[AuthService] getUserProfile error: code=${e.code}, message=${e.message}',
       );
-      rethrow;
+      rethrow; //Relança a exceção
     }
   }
 
+  //Atalho para buscar o perfil do usuario atualmente autenticado
   Future<UserProfile?> getCurrentUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) return null;
     return getUserProfile(user.uid);
   }
 
+  //Escuta as mudanças do usuario em tempo real
   Stream<UserProfile?> streamCurrentUserProfile() {
     final user = _auth.currentUser;
     if (user == null) {
@@ -272,6 +286,7 @@ class AuthService {
     }
   }
 
+  //Adiciona saldo simulado via Cloud Function
   Future<void> creditCurrentUserSaldo(double valor) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -310,6 +325,7 @@ class AuthService {
     }
   }
 
+  //Escuta as transaões do usuario em tempo real
   Stream<List<WalletTransaction>> streamCurrentUserTransactions() {
     final user = _auth.currentUser;
     if (user == null) {
@@ -326,6 +342,7 @@ class AuthService {
           .map((doc) => WalletTransaction.fromFirestore(doc.id, doc.data()))
           .toList();
 
+      //Ordenando da mais nova para a mais antiga
       transacoes.sort((a, b) {
         if (a.createdAt == null && b.createdAt == null) return 0;
         if (a.createdAt == null) return 1;
@@ -336,6 +353,7 @@ class AuthService {
     });
   }
 
+  // Busca as transações do usuario e ordena das mais recentes para as mais antigas
   Future<List<WalletTransaction>> getCurrentUserTransactions() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -361,6 +379,7 @@ class AuthService {
     return transacoes;
   }
 
+  //Garante que o usuario autenticado tenha um perfil no Firestore
   Future<UserProfile> ensureCurrentUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -382,10 +401,12 @@ class AuthService {
     return UserProfile.fromMap(user.uid, payload);
   }
 
+  //Verifica se a conta do usuario atual esta ativa
   Future<bool> isCurrentUserActive() async {
     final profile = await getCurrentUserProfile();
     return profile?.userActive ?? false;
   }
 
+  //Expõe o usuario atualmente atenticado
   User? get currentUser => _auth.currentUser;
 }

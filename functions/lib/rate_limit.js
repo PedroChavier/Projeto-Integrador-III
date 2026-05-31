@@ -1,3 +1,5 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -34,31 +36,38 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.enforceRateLimit = enforceRateLimit;
-const admin = __importStar(require("firebase-admin"));
+
+//Acesso ao Firestore pelo backend
+const admin = __importStar(require("firebase-admin")); 
+//Importa firebase Functions para lançar erros Http
 const functions = __importStar(require("firebase-functions/v1"));
-/**
- * Rate limit por chave (uid ou email) numa janela deslizante simples.
- * Usa Firestore para persistir contagem por janela. Janela = bucket de N segundos.
- *
- * Uso:
- *   await enforceRateLimit({ key: uid, action: "ordersCreate", maxPerWindow: 30, windowSeconds: 60 });
- *
- * Em violacao, lanca HttpsError "resource-exhausted".
- */
+
+//Conta quantas vezes o usuario usou uma função, e bloqueia se passou do limite
 async function enforceRateLimit(params) {
     const { key, action, maxPerWindow, windowSeconds } = params;
     if (!key)
         return;
+
     const db = admin.firestore();
+
+    //Divide o tempo em blocos fixos
     const windowStart = Math.floor(Date.now() / 1000 / windowSeconds) * windowSeconds;
+
+    //id do contador = ação + usuario + bloco de tempo
     const docId = `${action}_${key}_${windowStart}`;
     const ref = db.collection("rate_limits").doc(docId);
+
+    //Permite que dois pedidos simultaneos nao passam do limite ao mesmo tempo
     await db.runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
+        const snap = await tx.get(ref); // le o contador atual
         const count = snap.data()?.count ?? 0;
+
+        //se ja atingiu o limite, bloqueia e retorna erro
         if (count >= maxPerWindow) {
             throw new functions.https.HttpsError("resource-exhausted", `Limite de requisicoes atingido para ${action}. Tente novamente em alguns segundos.`);
         }
+
+        // se ainda esta dentro do limite, soma + 1
         tx.set(ref, {
             count: admin.firestore.FieldValue.increment(1),
             action,

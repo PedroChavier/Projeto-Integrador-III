@@ -1,10 +1,12 @@
+//Giovana Uchelli - 25008818
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/startup_service.dart';
 import '../home/home_screen.dart';
-import 'startup_detail.dart'; 
+import 'startup_detail.dart';
 
+// Tela de catálogo de startups com busca e filtros por status
 class StartupsScreen extends StatefulWidget {
   const StartupsScreen({super.key});
 
@@ -16,11 +18,12 @@ class _StartupsScreenState extends State<StartupsScreen> {
   final _searchController = TextEditingController();
   final StartupService _startupService = StartupService();
 
-  String _filtroSelecionado = 'Todas';
+  String _filtroSelecionado = 'Todas'; // Filtro ativo no momento
   List<StartupCatalogItem> _startups = const [];
   bool _isLoading = true;
   String? _errorMessage;
 
+  // Opções de filtro por status
   final List<String> _filtros = [
     'Todas',
     'Nova',
@@ -31,9 +34,10 @@ class _StartupsScreenState extends State<StartupsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadStartups();
+    _loadStartups(); // Carrega a lista ao abrir a tela
   }
 
+  // Busca a lista de startups via Cloud Function
   Future<void> _loadStartups() async {
     setState(() {
       _isLoading = true;
@@ -43,25 +47,21 @@ class _StartupsScreenState extends State<StartupsScreen> {
     try {
       final startups = await _startupService.listarStartups();
       if (!mounted) return;
-
       setState(() {
         _startups = startups;
         _isLoading = false;
       });
     } on FirebaseFunctionsException catch (error) {
+      // Erro específico do Firebase Functions com código e detalhes
       if (!mounted) return;
-
       setState(() {
-        final details =
-            error.details != null ? '\nDetalhes: ${error.details}' : '';
-        _errorMessage =
-            'Falha ao carregar startups (${error.code}): '
+        final details = error.details != null ? '\nDetalhes: ${error.details}' : '';
+        _errorMessage = 'Falha ao carregar startups (${error.code}): '
             '${error.message ?? ''}$details';
         _isLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
-
       setState(() {
         _errorMessage = 'Falha ao carregar startups: $error';
         _isLoading = false;
@@ -69,40 +69,34 @@ class _StartupsScreenState extends State<StartupsScreen> {
     }
   }
 
+  // Filtra a lista pelo status selecionado e pelo texto de busca
   List<StartupCatalogItem> get _startupsFiltradas {
     final termoBusca = _searchController.text.toLowerCase();
 
     return _startups.where((startup) {
-      final matchFiltro = _filtroSelecionado == 'Todas' ||
-          startup.status == _filtroSelecionado;
+      final matchFiltro = _filtroSelecionado == 'Todas' || startup.status == _filtroSelecionado;
       final matchSearch = startup.nome.toLowerCase().contains(termoBusca);
       return matchFiltro && matchSearch;
     }).toList();
   }
 
+  // Retorna a cor de fundo da tag de status
   Color _tagColor(String status) {
     switch (status) {
-      case 'Em expansão':
-        return const Color(0xFFFFF3E0);
-      case 'Em operação':
-        return const Color(0xFFE8F5E9);
-      case 'Nova':
-        return const Color(0xFFE8E6FF);
-      default:
-        return const Color(0xFFEEEEEE);
+      case 'Em expansão': return const Color(0xFFFFF3E0);
+      case 'Em operação': return const Color(0xFFE8F5E9);
+      case 'Nova':        return const Color(0xFFE8E6FF);
+      default:            return const Color(0xFFEEEEEE);
     }
   }
 
+  // Retorna a cor do texto da tag de status
   Color _tagTextColor(String status) {
     switch (status) {
-      case 'Em expansão':
-        return const Color(0xFFE65100);
-      case 'Em operação':
-        return const Color(0xFF2E7D32);
-      case 'Nova':
-        return const Color(0xFF6C63FF);
-      default:
-        return const Color.fromARGB(137, 181, 144, 144);
+      case 'Em expansão': return const Color(0xFFE65100);
+      case 'Em operação': return const Color(0xFF2E7D32);
+      case 'Nova':        return const Color(0xFF6C63FF);
+      default:            return const Color.fromARGB(137, 181, 144, 144);
     }
   }
 
@@ -122,6 +116,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
         child: Column(
           children: [
             const SizedBox(height: 20),
+            // Barra decorativa com gradiente no topo
             Container(
               height: 2,
               decoration: const BoxDecoration(
@@ -136,8 +131,10 @@ class _StartupsScreenState extends State<StartupsScreen> {
             ),
             Expanded(
               child: _isLoading
+                  // Carregando
                   ? const Center(child: CircularProgressIndicator())
                   : _errorMessage != null
+                      // Erro com botão de tentar novamente
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
@@ -146,10 +143,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
                               children: [
                                 Text(
                                   _errorMessage!,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black54,
-                                  ),
+                                  style: const TextStyle(fontSize: 14, color: Colors.black54),
                                   textAlign: TextAlign.center,
                                   maxLines: 5,
                                   overflow: TextOverflow.ellipsis,
@@ -163,11 +157,9 @@ class _StartupsScreenState extends State<StartupsScreen> {
                             ),
                           ),
                         )
+                      // Conteúdo principal
                       : SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 24,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -180,6 +172,8 @@ class _StartupsScreenState extends State<StartupsScreen> {
                                 ),
                               ),
                               const SizedBox(height: 20),
+
+                              // Campo de busca por nome
                               Container(
                                 height: 46,
                                 decoration: BoxDecoration(
@@ -188,48 +182,32 @@ class _StartupsScreenState extends State<StartupsScreen> {
                                 ),
                                 child: TextField(
                                   controller: _searchController,
-                                  onChanged: (_) => setState(() {}),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                  ),
+                                  onChanged: (_) => setState(() {}), // Atualiza a lista ao digitar
+                                  style: const TextStyle(fontSize: 14, color: Colors.black87),
                                   decoration: const InputDecoration(
                                     hintText: 'Buscar Startup',
-                                    hintStyle: TextStyle(
-                                      color: Colors.black38,
-                                      fontSize: 14,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.search,
-                                      color: Colors.black38,
-                                      size: 20,
-                                    ),
+                                    hintStyle: TextStyle(color: Colors.black38, fontSize: 14),
+                                    prefixIcon: Icon(Icons.search, color: Colors.black38, size: 20),
                                     border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      vertical: 13,
-                                    ),
+                                    contentPadding: EdgeInsets.symmetric(vertical: 13),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 16),
+
+                              // Chips de filtro por status
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: _filtros.map((filtro) {
                                   final selected = _filtroSelecionado == filtro;
                                   return GestureDetector(
-                                    onTap: () => setState(
-                                      () => _filtroSelecionado = filtro,
-                                    ),
+                                    onTap: () => setState(() => _filtroSelecionado = filtro),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                       decoration: BoxDecoration(
-                                        color: selected
-                                            ? const Color(0xFFD7DEEC)
-                                            : Colors.white,
+                                        // Destaque visual no filtro ativo
+                                        color: selected ? const Color(0xFFD7DEEC) : Colors.white,
                                         borderRadius: BorderRadius.circular(30),
                                         border: Border.all(
                                           color: selected
@@ -243,12 +221,7 @@ class _StartupsScreenState extends State<StartupsScreen> {
                                           fontSize: 13,
                                           fontWeight: FontWeight.w500,
                                           color: selected
-                                              ? const Color.fromARGB(
-                                                  255,
-                                                  10,
-                                                  10,
-                                                  160,
-                                                )
+                                              ? const Color.fromARGB(255, 10, 10, 160)
                                               : Colors.black54,
                                         ),
                                       ),
@@ -257,11 +230,13 @@ class _StartupsScreenState extends State<StartupsScreen> {
                                 }).toList(),
                               ),
                               const SizedBox(height: 20),
+
+                              // Lista de cards filtrados
                               ...filtered.map(
                                 (startup) => Padding(
                                   padding: const EdgeInsets.only(bottom: 14),
                                   child: _StartupCard(
-                                    uid: startup.uid, // ← adicione
+                                    uid: startup.uid,
                                     nome: startup.nome,
                                     descricao: startup.descricao,
                                     status: startup.status,
@@ -286,8 +261,9 @@ class _StartupsScreenState extends State<StartupsScreen> {
   }
 }
 
+// Card clicável de uma startup no catálogo
 class _StartupCard extends StatelessWidget {
-  final String uid; // ← adicione
+  final String uid; // ID usado para navegar para os detalhes
   final String nome;
   final String descricao;
   final String status;
@@ -298,7 +274,7 @@ class _StartupCard extends StatelessWidget {
   final Color tagTextColor;
 
   const _StartupCard({
-    required this.uid, // ← adicione
+    required this.uid,
     required this.nome,
     required this.descricao,
     required this.status,
@@ -312,10 +288,11 @@ class _StartupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      // Navega para a tela de detalhes sem animação de transição
       onTap: () => Navigator.push(
         context,
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => StartupDetalheScreen(startupUid: uid), // ← passa o uid
+          pageBuilder: (_, __, ___) => StartupDetalheScreen(startupUid: uid),
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
         ),
@@ -337,6 +314,7 @@ class _StartupCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Nome da startup e tag de status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -349,35 +327,26 @@ class _StartupCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: tagColor,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     status,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: tagTextColor,
-                    ),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tagTextColor),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
+            // Descrição resumida da startup
             Text(
               descricao,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color.fromARGB(137, 0, 0, 0),
-                height: 1.4,
-              ),
+              style: const TextStyle(fontSize: 13, color: Color.fromARGB(137, 0, 0, 0), height: 1.4),
             ),
             const SizedBox(height: 14),
+            // Métricas: tokens, capital captado e preço do token
             Row(
               children: [
                 _Metrica(label: 'Tokens', valor: tokens),
@@ -394,6 +363,7 @@ class _StartupCard extends StatelessWidget {
   }
 }
 
+// Widget reutilizável para exibir um label e seu valor (ex: "Tokens / 10K")
 class _Metrica extends StatelessWidget {
   final String label;
   final String valor;
@@ -405,18 +375,11 @@ class _Metrica extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: Colors.black38),
-        ),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.black38)),
         const SizedBox(height: 2),
         Text(
           valor,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
-          ),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black87),
         ),
       ],
     );

@@ -1,5 +1,9 @@
+//Pedro Andre do Carmo Chavier -25018639
+
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+//Representa uma trasação registrada na caretira do investidor
 class WalletTransaction {
   const WalletTransaction({
     required this.id,
@@ -21,11 +25,12 @@ class WalletTransaction {
   final String tipo;
   final String fonte;
 
+  //Transforma um documento do firebase em um objeto dart (map)
   factory WalletTransaction.fromFirestore(String id, Map<String, dynamic> map) {
     final rawCreatedAt = map['createdAt'];
     final createdAt = rawCreatedAt is Timestamp
         ? rawCreatedAt.toDate()
-        : DateTime.tryParse(rawCreatedAt?.toString() ?? '');
+        : DateTime.tryParse(rawCreatedAt?.toString() ?? ''); //tryParse -> tenta converter a String em DateTime
 
     return WalletTransaction(
       id: id,

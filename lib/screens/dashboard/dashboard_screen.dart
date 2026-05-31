@@ -1,15 +1,17 @@
-import 'dart:ui' as ui;
+//Pedro Andre do Carmo Chavier -25018639
+
+import 'dart:ui' as ui; //ui.Gradient.linear: preenchimento do grafico
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart' hide TextDirection;
+import 'package:intl/intl.dart' hide TextDirection; //Formataçãaa de moeda e numeros
 
-import '../../models/wallet_holding.dart';
+import '../../models/wallet_holding.dart'; 
 import '../../services/dashboard_service.dart';
 import '../home/home_screen.dart'; // importa AppBottomNav
 import '../startups/startup_detail.dart';
 import '../startups/startups_catalog_screen.dart';
 
-// ── Paleta (consistente com HomeScreen) ───────────────────────
+// ── Paleta de cores global, compartilhada com a HomeScreen ────────────────────
 const Color _corPrimaria = Color(0xFF000141);
 const Color _corVerde = Color(0xFF2E7D32);
 const Color _corVermelho = Color(0xFFC62828);
@@ -17,16 +19,17 @@ const Color _corNeutra = Colors.black45;
 const Color _corSkeleton = Color(0xFFEEEEEE);
 const Color _corSkeletonSoft = Color(0xFFF5F5F5);
 
+// Abreviações dos meses em pt-BR usadas nos rótulos do eixo X do gráfico
 const List<String> _mesesAbrev = [
   'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
   'jul', 'ago', 'set', 'out', 'nov', 'dez',
 ];
 
-// ── Formatadores ──────────────────────────────────────────────
-final NumberFormat _fmtBRL =
-    NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$ ', decimalDigits: 2);
+// ── Formatadores de moeda e quantidade de tokens ──────────────────────────────
+final NumberFormat _fmtBRL = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$ ', decimalDigits: 2);
 final NumberFormat _fmtTokens = NumberFormat('#,##0', 'pt_BR');
 
+// Formata variação percentual com sinal (ex.: +3,5% ou -1,2%)
 String _fmtPct(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}%';
 
 class DashboardScreen extends StatefulWidget {
@@ -37,50 +40,49 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen>
-    with SingleTickerProviderStateMixin {
-  int _selectedPeriodIndex = 0;
+    with SingleTickerProviderStateMixin { 
+  // SingleTickerProviderStateMixin fornece o 'vsync' para o AnimationController
 
-  // Startup selecionada no gráfico de preço (chips). null → usa a primeira
-  // (maior posição) como padrão.
+  
+  int _selectedPeriodIndex = 0; // Índice do período de análise selecionado (Hoje, Semana, Mês…)
+
+  // Startup selecionada para exibir no gráfico de preço do token
   String? _selectedStartupId;
 
-  // Inicializa com valor padrão seguro — evita LateInitializationError
+  // Controlador e animação de entrada da linha do gráfico
   AnimationController? _chartController;
   Animation<double> _chartAnimation = const AlwaysStoppedAnimation(0.0);
 
+  // Lista de períodos exibidos nos chips de filtro
   final List<String> _periods = [
-    'Hoje',
-    'Semana',
-    'Mês',
-    'Bimestre',
-    'Trimestre',
-    'Semestre',
-    '1 ano',
-    '5 anos',
-    'Tudo',
+    'Hoje', 'Semana', 'Mês', 'Bimestre',
+    'Trimestre', 'Semestre', '1 ano', '5 anos', 'Tudo',
   ];
 
+  // Serviço responsável por buscar dados da carteira e do histórico de preços
   final DashboardService _service = DashboardService();
 
-  // ── Estado dos dados auxiliares (carregados via Future, uma vez) ──
+  // Dados auxiliares: execuções de ordens, histórico de trades e custo por startup
   List<OrderExecution> _executions = const [];
   Map<String, List<PricePoint>> _tradesByStartup = const {};
   Map<String, double> _custoPorStartup = const {};
 
-  bool _loadingAux = true;
+  bool _loadingAux = true; 
   Set<String> _auxLoadedIds = const {};
   bool _auxLoading = false;
 
   @override
   void initState() {
     super.initState();
+    // Inicializa o controlador da animação do gráfico (1,5 s, curva suave)
+
     _chartController = AnimationController(
-      vsync: this,
+      vsync: this, //Sincroniza com o frame rate da tela
       duration: const Duration(milliseconds: 1500),
     );
     _chartAnimation = CurvedAnimation(
       parent: _chartController!,
-      curve: Curves.easeInOut,
+      curve: Curves.easeInOut, //Curva que começa devagar -> acelera -> termina devagar
     );
   }
 
@@ -90,8 +92,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.dispose();
   }
 
-  // ── Carregamento dos dados auxiliares (executions + trades) ──────
-  // Disparado quando o conjunto de startups dos holdings muda.
+  // Verifica se os dados auxiliares precisam ser recarregados
+  // (evita chamadas repetidas quando os holdings não mudaram)
   void _maybeLoadAux(List<WalletHolding> holdings) {
     final ids = holdings.map((h) => h.startupUid).toSet();
     if (_auxLoading) return;
@@ -102,6 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _loadAux(holdings);
   }
 
+  // Carrega execuções e histórico de preços de todas as startups em paralelo
   Future<void> _loadAux(List<WalletHolding> holdings) async {
     _auxLoading = true;
     if (mounted) setState(() => _loadingAux = true);
@@ -118,6 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _custoPorStartup = _service.custoPorStartup(execs);
         _loadingAux = false;
       });
+      // Dispara a animação de entrada do gráfico após os dados chegarem
       _chartController?.forward(from: 0);
     } catch (_) {
       if (!mounted) return;
@@ -138,11 +142,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Métricas ─────────────────────────────────────────────────
+  // ── Métricas da carteira ──────────────────────────────────────────────────
+
+  // Soma o valor atual estimado de todos os holdings = patrimônio total
   double _patrimonio(List<WalletHolding> h) =>
       h.fold(0.0, (sum, e) => sum + e.valorAtualEstimado);
 
-  /// Custo total para lucro/prejuízo. Sem histórico → soma de `valorInvestido`.
+  // Custo total de aquisição; usa o histórico real de execuções quando disponível
   double _custoTotal(List<WalletHolding> holdings) {
     if (_executions.isEmpty) {
       return holdings.fold(0.0, (sum, h) => sum + h.valorInvestido);
@@ -150,61 +156,44 @@ class _DashboardScreenState extends State<DashboardScreen>
     return _service.custoTotal(_executions);
   }
 
+  // Custo de aquisição individual de uma startup
   double _custoAquisicao(WalletHolding h) =>
       _custoPorStartup[h.startupUid] ?? h.valorInvestido;
 
+  // Texto descritivo do período exibido abaixo do lucro/prejuízo
   String _subtituloLucro() {
     switch (_selectedPeriodIndex) {
-      case 0:
-        return 'hoje';
-      case 1:
-        return 'esta semana';
-      case 2:
-        return 'este mês';
-      case 3:
-        return 'no bimestre';
-      case 4:
-        return 'no trimestre';
-      case 5:
-        return 'no semestre';
-      case 6:
-        return 'em 1 ano';
-      case 7:
-        return 'em 5 anos';
-      default:
-        return 'todo o período';
+      case 0: return 'hoje';
+      case 1: return 'esta semana';
+      case 2: return 'este mês';
+      case 3: return 'no bimestre';
+      case 4: return 'no trimestre';
+      case 5: return 'no semestre';
+      case 6: return 'em 1 ano';
+      case 7: return 'em 5 anos';
+      default: return 'todo o período';
     }
   }
 
-  // ── Amostragem temporal por período selecionado ─────────────
-  // Cada período devolve a lista de instantes (crescente) em que o preço será
-  // amostrado para desenhar a linha. Mais recente = mais pontos.
+  // ── Amostragem temporal para o gráfico ───────────────────────────────────
+  // Gera os instantes (do mais antigo ao mais recente) que serão plotados
+  // conforme o período selecionado — mais pontos = mais granularidade
   List<DateTime> _sampleTimes(WalletHolding h) {
     final now = DateTime.now();
     switch (_selectedPeriodIndex) {
-      case 0: // Hoje → 24 pontos horários
-        return List.generate(24, (i) => now.subtract(Duration(hours: 23 - i)));
-      case 1: // Semana → 7 pontos diários
-        return List.generate(7, (i) => now.subtract(Duration(days: 6 - i)));
-      case 2: // Mês → 30 pontos diários
-        return List.generate(30, (i) => now.subtract(Duration(days: 29 - i)));
-      case 3: // Bimestre (~60d) → 30 pontos (a cada 2 dias)
-        return List.generate(30, (i) => now.subtract(Duration(days: 2 * (29 - i))));
-      case 4: // Trimestre (~90d) → 30 pontos (a cada 3 dias)
-        return List.generate(30, (i) => now.subtract(Duration(days: 3 * (29 - i))));
-      case 5: // Semestre (~182d) → 26 pontos semanais
-        return List.generate(26, (i) => now.subtract(Duration(days: 7 * (25 - i))));
-      case 6: // 1 ano (~364d) → 27 pontos (a cada 14 dias)
-        return List.generate(27, (i) => now.subtract(Duration(days: 14 * (26 - i))));
-      case 7: // 5 anos (~1800d) → 60 pontos mensais (~30 dias)
-        return List.generate(60, (i) => now.subtract(Duration(days: 30 * (59 - i))));
-      default: // Tudo → do primeiro trade da startup até hoje
-        return _allTimeSamples(h, now);
+      case 0: return List.generate(24, (i) => now.subtract(Duration(hours: 23 - i)));
+      case 1: return List.generate(7,  (i) => now.subtract(Duration(days: 6 - i)));
+      case 2: return List.generate(30, (i) => now.subtract(Duration(days: 29 - i)));
+      case 3: return List.generate(30, (i) => now.subtract(Duration(days: 2 * (29 - i))));
+      case 4: return List.generate(30, (i) => now.subtract(Duration(days: 3 * (29 - i))));
+      case 5: return List.generate(26, (i) => now.subtract(Duration(days: 7 * (25 - i))));
+      case 6: return List.generate(27, (i) => now.subtract(Duration(days: 14 * (26 - i))));
+      case 7: return List.generate(60, (i) => now.subtract(Duration(days: 30 * (59 - i))));
+      default: return _allTimeSamples(h, now);
     }
   }
 
-  /// Pontos para o período "Tudo": 40 instantes igualmente espaçados entre o
-  /// primeiro trade da startup e agora. Sem trades, cai para o último ano.
+  // Período "Tudo": 40 amostras igualmente espaçadas desde o primeiro trade
   List<DateTime> _allTimeSamples(WalletHolding h, DateTime now) {
     final trades = _tradesByStartup[h.startupUid] ?? const [];
     final start = trades.isNotEmpty
@@ -219,19 +208,21 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
+  // Retorna o preço do token da startup no instante [t]
+  // usando o último trade registrado até aquele momento (LOCF)
   double _priceAt(WalletHolding h, DateTime t) {
     final trades = _tradesByStartup[h.startupUid] ?? const [];
     if (trades.isEmpty) return h.precoMedio;
     double? p;
     for (final tr in trades) {
-      if (tr.at.isAfter(t)) break; // trades em ordem crescente de tempo
+      if (tr.at.isAfter(t)) break;
       p = tr.price;
     }
-    return p ?? trades.first.price; // antes do 1º trade → preço do 1º
+    return p ?? trades.first.price;
   }
 
-  /// Holding atualmente selecionado para o gráfico de preço. Sem seleção
-  /// explícita (ou seleção inválida) usa o primeiro (maior posição).
+  // Retorna o holding selecionado para o gráfico
+  // (fallback: primeiro da lista, que possui a maior posição)
   WalletHolding? _selectedHolding(List<WalletHolding> holdings) {
     if (holdings.isEmpty) return null;
     for (final h in holdings) {
@@ -240,14 +231,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     return holdings.first;
   }
 
-  /// `true` quando a startup ainda não tem trades — o gráfico vira uma linha
-  /// plana no preço atual, marcada como "Estimado".
+  // Startup sem histórico de trades → gráfico exibe linha plana como "Estimado"
   bool _priceEstimated(WalletHolding h) =>
       (_tradesByStartup[h.startupUid] ?? const []).isEmpty;
 
-  /// Série de preço do token da startup [h] ao longo do período selecionado,
-  /// já normalizada em [0,1] para o painter. O preço em cada instante é o do
-  /// último trade até ali (LOCF); antes do 1º trade usa o preço do 1º.
+  // Monta todos os dados necessários para renderizar o gráfico:
+  // pontos normalizados, variação no período, rótulos do eixo X e flag de estimativa
   ({
     List<Offset> points,
     bool estimated,
@@ -260,7 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final points = _normalize(series);
 
     final estimated = _priceEstimated(h);
-    final precoAtual = h.precoMedio; // last_price (ou preço de emissão)
+    final precoAtual = h.precoMedio;
     final precoInicio = series.first.value;
     final variacao = estimated || precoInicio == 0
         ? null
@@ -275,7 +264,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  /// Marcações do eixo X (até 4) com data/hora conforme o período.
+  // Gera até 4 marcações no eixo X espaçadas uniformemente na série
   List<({double dx, String label})> _buildXLabels(
     List<({DateTime at, double value})> series,
     List<Offset> points,
@@ -287,36 +276,30 @@ class _DashboardScreenState extends State<DashboardScreen>
     for (var j = 0; j < ticks; j++) {
       final idx = (j * (series.length - 1) / (ticks - 1)).round();
       final label = _axisLabel(series[idx].at);
-      if (label == ultimo) continue; // evita repetir rótulo adjacente
+      if (label == ultimo) continue;
       ultimo = label;
       out.add((dx: points[idx].dx, label: label));
     }
     return out;
   }
 
-  /// Formata um instante para o eixo X conforme o período selecionado.
+  // Formata o rótulo do eixo X de acordo com a granularidade do período
+  // (hora para "Hoje", dia+mês para curto prazo, mês/ano para longo prazo)
   String _axisLabel(DateTime t) {
     String d2(int n) => n.toString().padLeft(2, '0');
     final mes = _mesesAbrev[t.month - 1];
     final ano2 = d2(t.year % 100);
     switch (_selectedPeriodIndex) {
-      case 0: // Hoje → hora
-        return '${d2(t.hour)}h';
-      case 1: // Semana
-      case 2: // Mês
-      case 3: // Bimestre
-      case 4: // Trimestre
-        return '${t.day} $mes'; // dia + mês abreviado (ex.: "15 mai")
-      case 5: // Semestre
-      case 6: // 1 ano
-        return mes; // mês abreviado (ex.: "mai")
-      default: // 5 anos / Tudo → mês abreviado + ano 2 dígitos (ex.: "mai/24")
-        return '$mes/$ano2';
+      case 0:            return '${d2(t.hour)}h';
+      case 1: case 2:
+      case 3: case 4:    return '${t.day} $mes';
+      case 5: case 6:    return mes;
+      default:           return '$mes/$ano2';
     }
   }
 
-  /// Converte a série em coordenadas normalizadas para o `_LineChartPainter`
-  /// (dy invertido — o canvas cresce para baixo). Margem vertical de 5%.
+  // Converte a série temporal em coordenadas normalizadas [0,1]
+  // com margem vertical de 5% para que a linha não cole nas bordas
   List<Offset> _normalize(List<({DateTime at, double value})> series) {
     if (series.isEmpty) return const [];
     var minV = series.first.value, maxV = series.first.value;
@@ -338,7 +321,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     }).toList();
   }
 
-  // ── Navegação ────────────────────────────────────────────────
+  // ── Navegação ─────────────────────────────────────────────────────────────
+
+  // Abre a tela de detalhe da startup ao tocar em um item da lista
   void _abrirStartup(WalletHolding h) {
     Navigator.push(
       context,
@@ -348,6 +333,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // Navega para o catálogo de startups sem empilhar na pilha de navegação
   void _verCatalogo() {
     Navigator.pushReplacement(
       context,
@@ -359,6 +345,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // ── Build principal ───────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -368,7 +355,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           children: [
             const SizedBox(height: 20),
-            // Gradiente topo — idêntico ao HomeScreen
+            // Barra decorativa de gradiente no topo (identidade visual do app)
             Container(
               height: 2,
               decoration: const BoxDecoration(
@@ -382,6 +369,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
             Expanded(
+              // Stream em tempo real dos holdings da carteira do usuário
               child: StreamBuilder<List<WalletHolding>>(
                 stream: _service.watchHoldings(),
                 builder: (context, snapshot) {
@@ -395,6 +383,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
                   final holdings = snapshot.data ?? const <WalletHolding>[];
 
+                  // Carrega dados auxiliares assim que os holdings chegarem
                   if (!waiting && holdings.isNotEmpty) {
                     WidgetsBinding.instance
                         .addPostFrameCallback((_) => _maybeLoadAux(holdings));
@@ -412,9 +401,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Layout principal ─────────────────────────────────────────
+  // ── Layout principal do dashboard ────────────────────────────────────────
   Widget _buildBody({required bool loading, List<WalletHolding>? holdings}) {
     final h = holdings ?? const <WalletHolding>[];
+
+    // Calcula patrimônio, custo, lucro e variação percentual da carteira
     final patrimonio = _patrimonio(h);
     final custo = _custoTotal(h);
     final lucro = patrimonio - custo;
@@ -439,9 +430,11 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           const SizedBox(height: 20),
 
+          // Chips de seleção de período (Hoje / Semana / Mês…)
           _buildPeriodFilter(),
           const SizedBox(height: 20),
 
+          // Cards de patrimônio e lucro/prejuízo — skeleton enquanto carrega
           if (loading)
             _buildMetricCardsSkeleton()
           else
@@ -452,7 +445,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           const SizedBox(height: 20),
 
-          // Evolução do preço do token — seletor de startup + gráfico
+          // Seletor de startup (chips) + legenda de preço + gráfico de linha
           if (!loading && selecionada != null) ...[
             _buildStartupSelector(h, selecionada),
             const SizedBox(height: 12),
@@ -470,6 +463,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           const SizedBox(height: 24),
 
+          // Lista de posições agrupadas por startup com valor e variação
           const Text(
             'Por Startup',
             style: TextStyle(
@@ -500,6 +494,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // Chips horizontais para selecionar o período de análise
   Widget _buildPeriodFilter() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -509,6 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           return GestureDetector(
             onTap: () {
               if (_selectedPeriodIndex == index) return;
+              // Atualiza período e reinicia a animação do gráfico
               setState(() => _selectedPeriodIndex = index);
               _chartController?.forward(from: 0);
             },
@@ -540,25 +536,20 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Cards de métrica ─────────────────────────────────────────
+  // ── Cards de métricas: Patrimônio e Lucro/Prejuízo ───────────────────────
   Widget _buildMetricCards({
     required double patrimonio,
     required double? variacao,
     required double lucro,
   }) {
+    // Cor do valor varia conforme positivo / negativo / neutro
     final temVariacao = variacao != null;
     final corVariacao = !temVariacao
         ? _corNeutra
-        : variacao > 0
-            ? _corVerde
-            : variacao < 0
-                ? _corVermelho
-                : _corNeutra;
+        : variacao > 0 ? _corVerde : variacao < 0 ? _corVermelho : _corNeutra;
     final corLucro = lucro > 0
         ? _corVerde
-        : lucro < 0
-            ? _corVermelho
-            : Colors.black87;
+        : lucro < 0 ? _corVermelho : Colors.black87;
     final prefixoLucro = lucro > 0 ? '+' : '';
 
     return Row(
@@ -586,6 +577,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // Card genérico: label no topo, valor em destaque, subtítulo colorido abaixo
   Widget _buildCard({
     required String label,
     required String value,
@@ -635,7 +627,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Seletor de startup (chips) para o gráfico de preço ───────
+  // ── Chips de seleção de startup para o gráfico de preço ──────────────────
   Widget _buildStartupSelector(
       List<WalletHolding> holdings, WalletHolding selecionada) {
     return SizedBox(
@@ -647,11 +639,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         itemBuilder: (context, i) {
           final h = holdings[i];
           final isSelected = h.startupUid == selecionada.startupUid;
+          // Exibe sigla quando disponível; caso contrário usa o nome completo
           final rotulo =
               h.startupSigla.isNotEmpty ? h.startupSigla : h.startupNome;
           return GestureDetector(
             onTap: () {
               if (_selectedStartupId == h.startupUid) return;
+              // Troca a startup e reinicia a animação do gráfico
               setState(() => _selectedStartupId = h.startupUid);
               _chartController?.forward(from: 0);
             },
@@ -681,14 +675,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Legenda do gráfico: nome · preço atual · variação no período ──
+  // Legenda acima do gráfico: nome da startup, preço atual e variação no período
   Widget _buildPriceCaption(
       WalletHolding h, double precoAtual, double? variacao) {
     final corVar = variacao == null || variacao == 0
         ? _corNeutra
-        : variacao > 0
-            ? _corVerde
-            : _corVermelho;
+        : variacao > 0 ? _corVerde : _corVermelho;
     return Row(
       children: [
         Expanded(
@@ -723,7 +715,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Gráfico ──────────────────────────────────────────────────
+  // ── Gráfico de linha animado ──────────────────────────────────────────────
   Widget _buildChart({
     required List<Offset> points,
     required String label,
@@ -749,6 +741,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.circular(12),
         child: Stack(
           children: [
+            // Redesenha o gráfico a cada tick da animação de entrada
             AnimatedBuilder(
               animation: _chartAnimation,
               builder: (context, _) {
@@ -763,6 +756,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 );
               },
             ),
+            // Badge "Estimado" para startups sem histórico de preços real
             if (estimated)
               Positioned(
                 top: 8,
@@ -790,7 +784,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Lista "Por Startup" ──────────────────────────────────────
+  // ── Item da lista "Por Startup" ───────────────────────────────────────────
   Widget _buildStartupItem(WalletHolding h) {
     final custo = _custoAquisicao(h);
     final valorAtual = h.valorAtualEstimado;
@@ -798,19 +792,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     final variacao = temCusto ? (valorAtual - custo) / custo * 100 : 0.0;
     final corVar = !temCusto || variacao == 0
         ? _corNeutra
-        : variacao > 0
-            ? _corVerde
-            : _corVermelho;
+        : variacao > 0 ? _corVerde : _corVermelho;
 
+    // Detalhe: quantidade de tokens × preço médio de aquisição
     final detalhe =
         '${_fmtTokens.format(h.quantidadeTotal)} tokens × ${_fmtBRL.format(h.precoMedio)}';
 
     return InkWell(
-      onTap: () => _abrirStartup(h),
+      onTap: () => _abrirStartup(h), // toque abre o detalhe da startup
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
           children: [
+            // Esquerda: nome e detalhes de quantidade/preço
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -825,11 +819,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   const SizedBox(height: 3),
                   Text(detalhe,
-                      style:
-                          const TextStyle(fontSize: 13, color: Colors.black45)),
+                      style: const TextStyle(fontSize: 13, color: Colors.black45)),
                 ],
               ),
             ),
+            // Direita: valor atual e variação percentual colorida
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -858,7 +852,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Estados de loading (esqueleto cinza) ─────────────────────
+  // ── Skeletons (placeholders cinzas durante o carregamento) ───────────────
   Widget _skeletonBox(double h, double w) => Container(
         height: h,
         width: w,
@@ -868,6 +862,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
       );
 
+  // Skeleton dos dois cards de métrica
   Widget _buildMetricCardsSkeleton() {
     Widget card() => Container(
           padding: const EdgeInsets.all(14),
@@ -896,6 +891,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // Spinner centralizado enquanto o gráfico ainda não tem dados
   Widget _buildChartLoading() {
     return Container(
       height: 200,
@@ -918,6 +914,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // Skeleton da lista "Por Startup": 2 linhas com blocos cinzas
   Widget _buildStartupSkeleton() {
     return Column(
       children: List.generate(2, (i) {
@@ -969,7 +966,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Empty state ──────────────────────────────────────────────
+  // ── Empty state: carteira vazia, convite para explorar startups ──────────
   Widget _buildEmptyState() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -1006,6 +1003,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   style: TextStyle(fontSize: 14, color: Colors.black54),
                 ),
                 const SizedBox(height: 24),
+                // Botão que leva direto ao catálogo de startups
                 ElevatedButton(
                   onPressed: _verCatalogo,
                   style: ElevatedButton.styleFrom(
@@ -1028,12 +1026,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 }
 
-// ── Gráfico de linha com animação, grid e gradiente ───────────
+// ── CustomPainter: gráfico de linha com animação de entrada ──────────────────
+// Desenha grid, área de gradiente, linha curva e rótulos do eixo X
 class _LineChartPainter extends CustomPainter {
-  final double progress;
-  final List<Offset> points; // normalizados em [0,1]
-  final String label;
-  final List<({double dx, String label})> xLabels; // marcações do eixo X
+  final double progress;  // 0.0 → 1.0 controla até onde a linha foi desenhada
+  final List<Offset> points; // pontos normalizados em [0,1]
+  final String label;        // preço exibido na ponta da linha
+  final List<({double dx, String label})> xLabels;
 
   _LineChartPainter({
     required this.progress,
@@ -1044,15 +1043,17 @@ class _LineChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Margens internas: espaço à direita para o label de preço,
+    // espaço inferior para os rótulos do eixo X
     const double paddingLeft = 12;
     const double paddingRight = 70;
     const double paddingTop = 24;
-    const double paddingBottom = 28; // espaço para os rótulos do eixo X
+    const double paddingBottom = 28;
 
     final chartW = size.width - paddingLeft - paddingRight;
     final chartH = size.height - paddingTop - paddingBottom;
 
-    // ── Grid lines horizontais ──────────────────────────
+    // ── Grid horizontal (5 linhas equidistantes) ──────────────────────────
     final gridPaint = Paint()
       ..color = const Color.fromARGB(255, 236, 236, 241)
       ..strokeWidth = 1.0
@@ -1068,9 +1069,9 @@ class _LineChartPainter extends CustomPainter {
       );
     }
 
-    // Sem pontos suficientes para desenhar uma linha.
     if (points.length < 2) return;
 
+    // Converte coordenadas normalizadas para pixels do canvas
     final mapped = points
         .map((p) => Offset(
               paddingLeft + p.dx * chartW,
@@ -1078,13 +1079,14 @@ class _LineChartPainter extends CustomPainter {
             ))
         .toList();
 
-    // ── Calcula até onde desenhar com base no progress ──
+    // ── Animação: calcula até qual ponto da linha já foi revelado ─────────
     final totalSegments = mapped.length - 1;
     final double clampedProgress = progress.clamp(0.0, 1.0);
     final currentSegment =
         (clampedProgress * totalSegments).floor().clamp(0, totalSegments - 1);
     final segmentProgress = (clampedProgress * totalSegments) - currentSegment;
 
+    // Constrói o Path da linha usando curvas de Bézier (aspecto suave)
     final linePath = Path();
     linePath.moveTo(mapped[0].dx, mapped[0].dy);
 
@@ -1094,10 +1096,9 @@ class _LineChartPainter extends CustomPainter {
       final cx = (prev.dx + curr.dx) / 2;
 
       if (i < currentSegment + 1) {
-        // Segmento completo
         linePath.cubicTo(cx, prev.dy, cx, curr.dy, curr.dx, curr.dy);
       } else if (i == currentSegment + 1) {
-        // Segmento parcial
+        // Segmento parcial: interpola até o ponto atual da animação
         final t = clampedProgress >= 1.0 ? 1.0 : segmentProgress;
         final endX = prev.dx + (curr.dx - prev.dx) * t;
         final endY = prev.dy + (curr.dy - prev.dy) * t;
@@ -1106,7 +1107,7 @@ class _LineChartPainter extends CustomPainter {
       }
     }
 
-    // Ponto animado atual
+    // Ponto atual da animação (ponta da linha em movimento)
     final Offset animatedEnd;
     if (clampedProgress >= 1.0) {
       animatedEnd = mapped.last;
@@ -1119,7 +1120,7 @@ class _LineChartPainter extends CustomPainter {
       );
     }
 
-    // Preenchimento gradiente
+    // ── Área de gradiente abaixo da linha ─────────────────────────────────
     final fillPath = Path()..addPath(linePath, Offset.zero);
     fillPath.lineTo(animatedEnd.dx, paddingTop + chartH);
     fillPath.lineTo(mapped.first.dx, paddingTop + chartH);
@@ -1130,31 +1131,29 @@ class _LineChartPainter extends CustomPainter {
         Offset(0, paddingTop),
         Offset(0, paddingTop + chartH),
         [
-          const Color(0xFFE91E8C).withOpacity(0.25),
-          const Color(0xFFE91E8C).withOpacity(0.02),
+          const Color(0xFFE91E8C).withOpacity(0.25), // rosa suave no topo
+          const Color(0xFFE91E8C).withOpacity(0.02), // quase transparente embaixo
         ],
       );
-
     canvas.drawPath(fillPath, fillPaint);
 
-    // Linha
+    // ── Linha principal ───────────────────────────────────────────────────
     final linePaint = Paint()
       ..color = const Color(0xFFAD1457)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-
     canvas.drawPath(linePath, linePaint);
 
-    // Ponto animado na ponta
+    // Ponto circular na ponta animada da linha
     canvas.drawCircle(
       animatedEnd,
       5,
       Paint()..color = const Color(0xFFAD1457),
     );
 
-    // Label aparece só quando a animação termina
+    // Label do preço aparece apenas quando a animação termina
     if (clampedProgress >= 1.0) {
       const labelStyle = TextStyle(
         fontSize: 11,
@@ -1171,7 +1170,7 @@ class _LineChartPainter extends CustomPainter {
       );
     }
 
-    // ── Eixo X: rótulos de tempo/data ───────────────────
+    // ── Rótulos e marcações do eixo X ─────────────────────────────────────
     const axisStyle = TextStyle(
       fontSize: 9,
       fontWeight: FontWeight.w500,
@@ -1179,6 +1178,7 @@ class _LineChartPainter extends CustomPainter {
     );
     for (final tick in xLabels) {
       final cx = paddingLeft + tick.dx * chartW;
+      // Pequeno traço vertical indicando a posição do rótulo
       canvas.drawLine(
         Offset(cx, paddingTop + chartH),
         Offset(cx, paddingTop + chartH + 4),
@@ -1188,6 +1188,7 @@ class _LineChartPainter extends CustomPainter {
         text: TextSpan(text: tick.label, style: axisStyle),
         textDirection: TextDirection.ltr,
       )..layout();
+      // Centraliza o rótulo e impede que ultrapasse as bordas
       final x = (cx - lp.width / 2).clamp(0.0, size.width - lp.width);
       lp.paint(canvas, Offset(x, paddingTop + chartH + 6));
     }

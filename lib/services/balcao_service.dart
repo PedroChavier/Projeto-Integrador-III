@@ -1,26 +1,30 @@
-import 'dart:convert';
+//Pedro Andre do Carmo Chavier -25018639
 
-import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert'; //Fornece [jsonDecode], usado para interpretar mensagens de erro das cloud functions
+
+import 'package:cloud_firestore/cloud_firestore.dart' hide Order; // Importa tudo, execeto a classe order
+import 'package:cloud_functions/cloud_functions.dart'; //Execução de funções no servidor Firebase
+import 'package:firebase_auth/firebase_auth.dart'; //autenticação de usuarios via Fireabse
 
 import '../models/orderbook_models.dart';
 import '../models/wallet_holding.dart';
 
+//Serviço responsavel por todas as operações do balcão de negociação
 class BalcaoService {
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
-  final _fn = FirebaseFunctions.instanceFor(region: 'southamerica-east1');
+  final _fn = FirebaseFunctions.instanceFor(region: 'southamerica-east1'); //aponta para a regiao de sao paulo
 
-  String? get _uid => _auth.currentUser?.uid;
+  String? get _uid => _auth.currentUser?.uid; 
 
-  // ── Startups ──────────────────────────────────────────────────────────────
-
+  // Busca todas as startups cadastradas
   Future<List<Startup>> fetchStartups() async {
     final snap = await _db.collection('startups').get();
 
-    return Future.wait(snap.docs.map((doc) async {
+    return Future.wait(snap.docs.map((doc) async { //Future.wait executa varias operações assincronas em paralelo
       final d = doc.data();
+
+      //Carrega configuração e estatdo
       final (cfg, st) = await _loadBalcao(doc.reference);
 
       final nome = (d['nome'] as String?) ?? doc.id;
@@ -29,7 +33,7 @@ class BalcaoService {
           ? siglaRaw
           : nome
               .replaceAll(' ', '')
-              .substring(0, nome.replaceAll(' ', '').length.clamp(0, 4))
+              .substring(0, nome.replaceAll(' ', '').length.clamp(0, 4)) // primeiras 4 letras do nome
               .toUpperCase();
 
       return Startup(
@@ -50,20 +54,28 @@ class BalcaoService {
     }));
   }
 
-  // balcao é sub-coleção `startups/{id}/balcao/{config|state}`; fallback p/ mapa embutido legado.
+  //Carrega configuração e estado do balcão de uma startup
   Future<(Map<String, dynamic> cfg, Map<String, dynamic> st)> _loadBalcao(
       DocumentReference docRef) async {
     final col = docRef.collection('balcao');
+
+    //Busca dois documentos em paralelo
     final snaps =
         await Future.wait([col.doc('config').get(), col.doc('state').get()]);
+    
+
     final subCfg = snaps[0].data();
     final subSt = snaps[1].data();
+
+
     if (subCfg != null || subSt != null) {
       return (
         Map<String, dynamic>.from(subCfg ?? const {}),
         Map<String, dynamic>.from(subSt ?? const {}),
       );
     }
+
+    //fallback
     final rootSnap = await docRef.get();
     final root = rootSnap.data() is Map
         ? Map<String, dynamic>.from(rootSnap.data() as Map)
@@ -81,7 +93,7 @@ class BalcaoService {
     );
   }
 
-  // ── Streams ───────────────────────────────────────────────────────────────
+  // Escuta em tempo real as ordens abertas e parcialmente exceutas de uma startup
 
   Stream<(List<Order> buys, List<Order> sells)> watchOrders(String startupId) {
     final uid = _uid;
@@ -106,17 +118,19 @@ class BalcaoService {
         });
   }
 
+  //Escuta em tempo real os ultimos negocios da startup
   Stream<List<Trade>> watchTrades(String startupId) {
     return _db
         .collection('startups')
         .doc(startupId)
         .collection('trades')
         .orderBy('executed_at', descending: true)
-        .limit(30)
+        .limit(30) //Limita em 30
         .snapshots()
         .map((snap) => snap.docs.map(_tradeFromDoc).toList());
   }
 
+  //Escuta em tempo real o estado do balcao
   Stream<({double? lastPrice, int tokensVendidos, int tokensEmitidos})>
       watchBalcaoState(String startupId) {
     // try sub-collection first; fall back to embedded map via startup doc
@@ -142,7 +156,8 @@ class BalcaoService {
           tokensEmitidos: emitted,
         );
       }
-      // fallback: read embedded
+
+      // fallback: le os dados do mapa embutido no documento raiz
       final startupSnap = await _db.collection('startups').doc(startupId).get();
       final balcao =
           startupSnap.data()?['balcao'] as Map<String, dynamic>? ?? {};
@@ -156,6 +171,7 @@ class BalcaoService {
     });
   }
 
+  //Escuta em tempo real o saldo da carteira do usuario
   Stream<Wallet> watchWallet() {
     final uid = _uid;
     if (uid == null) {
@@ -178,6 +194,7 @@ class BalcaoService {
     });
   }
 
+  //Escuta as posições do usuario em todas as startups
   Stream<List<WalletHolding>> watchHoldings() {
     final uid = _uid;
     if (uid == null) return Stream.value(const []);
@@ -188,6 +205,7 @@ class BalcaoService {
         .collection('positions')
         .snapshots()
         .asyncMap((posSnap) async {
+
       final validPositions = posSnap.docs.where((doc) {
         final d = doc.data();
         final livres = (d['tokens_livres'] as num?)?.toInt() ?? 0;
@@ -252,6 +270,7 @@ class BalcaoService {
     });
   }
 
+  //Ouve o historico de ordens do usuario
   Stream<List<OrderHistoryEntry>> watchOrderHistory({int limit = 50}) {
     final uid = _uid;
     if (uid == null) return Stream.value(const []);
@@ -318,6 +337,7 @@ class BalcaoService {
     });
   }
 
+  //Escuta em tempo real a posição do usuarui em uma startup especifica
   Stream<({int tokensLivres, int tokensReservados})> watchPosition(
       String startupId) {
     final uid = _uid;
@@ -340,8 +360,7 @@ class BalcaoService {
     });
   }
 
-  // ── Order actions ─────────────────────────────────────────────────────────
-
+  // Envia uma ordem de compra ou venda vida Cloud Functions
   Future<OrderCreateResult> createOrder({
     required String startupId,
     required String side,
@@ -357,6 +376,7 @@ class BalcaoService {
         'qty': qty,
         if (price != null) 'price': price,
       });
+
       final trades = (res.data['trades'] as List?)?.length ?? 0;
       return OrderCreateResult(success: true, tradesExecuted: trades);
     } on FirebaseFunctionsException catch (e) {
@@ -373,6 +393,7 @@ class BalcaoService {
     }
   }
 
+  //Cancela uma ordem aberta via Cloud Functions
   Future<CancelResult> cancelOrder({
     required String startupId,
     required String orderId,
@@ -394,8 +415,7 @@ class BalcaoService {
     }
   }
 
-  // ── Mappers ───────────────────────────────────────────────────────────────
-
+  // Converte um docuemnto do Firestore em um modelo [order]
   Order _orderFromDoc(DocumentSnapshot doc, String? currentUid) {
     final d = doc.data() as Map<String, dynamic>? ?? {};
     return Order(
@@ -411,6 +431,7 @@ class BalcaoService {
     );
   }
 
+  //Converte um documento Firestore em um modelo [Trade]
   Trade _tradeFromDoc(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>? ?? {};
     final ts = d['executed_at'] as Timestamp?;
@@ -420,14 +441,13 @@ class BalcaoService {
     final s = dt.second.toString().padLeft(2, '0');
     return Trade(
       time: '$h:$m:$s',
-      side: 'compra', // all trades represent a buy matching a sell
+      side: 'compra', // todos os trades representam uma compra casada com uma venda
       price: (d['price'] as num?)?.toDouble() ?? 0,
       qty: (d['qty'] as num?)?.toInt() ?? 0,
     );
   }
 
-  // ── Error parsing ─────────────────────────────────────────────────────────
-
+  //Extrai o codigo de erro Json retornado pelas cloud functions
   String? _parseErrorCode(String? message) {
     try {
       final m = jsonDecode(message ?? '{}') as Map<String, dynamic>;
@@ -437,6 +457,7 @@ class BalcaoService {
     }
   }
 
+  //Converte o codigo de erro da cloud function em uma mensagem legivel
   String _humanizeError(String? message) {
     try {
       final m = jsonDecode(message ?? '{}') as Map<String, dynamic>;
@@ -486,11 +507,10 @@ class BalcaoService {
   }
 }
 
-// ── Result types ─────────────────────────────────────────────────────────────
-
+//Resultado de uma tentativa de criação de ordens
 class OrderCreateResult {
   final bool success;
-  final int tradesExecuted;
+  final int tradesExecuted; //Numero de negocios gerados
   final String? errorCode;
   final String? errorMessage;
 
@@ -502,6 +522,7 @@ class OrderCreateResult {
   });
 }
 
+//Resultado de uma tentiva de cancelamento de ordem
 class CancelResult {
   final bool success;
   final String? errorMessage;
@@ -509,13 +530,14 @@ class CancelResult {
   const CancelResult({required this.success, this.errorMessage});
 }
 
+//Entrada do historico de ordens enriquecida com dados da startup
 class OrderHistoryEntry {
   final String id;
   final String startupId;
   final String startupNome;
   final String startupSigla;
-  final String side; // 'buy' | 'sell'
-  final String orderType; // 'market' | 'limit'
+  final String side; // byd = compra | sell = venda
+  final String orderType; // 'market = a mercado' | 'limit = preço definio=do'
   final double price;
   final int qtyOriginal;
   final String status; // último status em status_changes

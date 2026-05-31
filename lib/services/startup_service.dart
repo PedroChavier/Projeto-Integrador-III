@@ -1,6 +1,9 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/startup.dart';
 
+//versao resumida da startup, usada no catálago
 class StartupCatalogItem {
   final String uid;
   final String nome;
@@ -21,6 +24,8 @@ class StartupCatalogItem {
   });
 }
 
+
+//Atalho de tipo
 typedef _Balcao = ({Map<String, dynamic> config, Map<String, dynamic> state});
 
 class StartupService {
@@ -34,11 +39,11 @@ class StartupService {
   final String _collectionPath;
 
   // ── Catálogo ──────────────────────────────────────────────────
-  // `balcao` é subcoleção: startups/{id}/balcao/{config|state}.
-  // Pra cada startup faz raiz + config + state em paralelo.
+  // Busca todas as startups
   Future<List<StartupCatalogItem>> listarStartups() async {
     final snapshot = await _firestore.collection(_collectionPath).get();
 
+    //Busca um doc raiz + balcao/config + balcao/state em paralelo
     return Future.wait(snapshot.docs.map((doc) async {
       final data = doc.data();
       final balcao = await _loadBalcao(doc.reference);
@@ -49,6 +54,8 @@ class StartupService {
       );
       final precoEmissao = _readNum(balcao.config['preco_emissao']);
       final lastPrice = _readNum(balcao.state['last_price']);
+
+      //Exibe o ultimo preço se ja ouve trade
       final displayPreco = lastPrice > 0 ? lastPrice : precoEmissao;
 
       return StartupCatalogItem(
@@ -69,15 +76,16 @@ class StartupService {
   }
 
   // ── Detalhe da startup ────────────────────────────────────────
+  //Busca os dados completos de uma startup
   Future<Startup?> getStartup(String uid) async {
     if (uid.isEmpty) return null;
     final doc = await _firestore.collection(_collectionPath).doc(uid).get();
     if (!doc.exists || doc.data() == null) return null;
 
-    final data = Map<String, dynamic>.from(doc.data()!);
+    final data = Map<String, dynamic>.from(doc.data()!); //copia mutavel do documento
     final balcao = await _loadBalcao(doc.reference);
 
-    // Mescla balcao/config|state em chaves raiz pra Startup.fromFirestore.
+    // 
     if (balcao.config['preco_emissao'] != null) {
       data['precoToken'] = balcao.config['preco_emissao'];
       data['precoEmissao'] = balcao.config['preco_emissao'];
@@ -113,6 +121,7 @@ class StartupService {
     return Startup.fromFirestore(doc.id, data);
   }
 
+  //Se ja houve trades, o preço atual substitui o preço de emissao
   Future<_Balcao> _loadBalcao(DocumentReference docRef) async {
     final col = docRef.collection('balcao');
     final snaps = await Future.wait([
@@ -127,6 +136,8 @@ class StartupService {
 }
 
 // ── Funções auxiliares ───────────────────────────────────────────
+
+//converte qualquer valor para map
 Map<String, dynamic> _toMap(dynamic value) {
   if (value == null) return {};
   if (value is Map<String, dynamic>) return value;
@@ -136,12 +147,14 @@ Map<String, dynamic> _toMap(dynamic value) {
   return {};
 }
 
+//Le o campo como String
 String _readString(Object? value, {String fallback = ''}) {
   if (value is String) return value;
   if (value is num) return value.toString();
   return fallback;
 }
 
+//le um campo como double
 double _readNum(Object? value, {double fallback = 0}) {
   if (value is num) return value.toDouble();
   if (value is String) {
@@ -150,6 +163,7 @@ double _readNum(Object? value, {double fallback = 0}) {
   return fallback;
 }
 
+//Normaliza os status da startup removendo acentos e variações de escrita
 String _normalizeStatus(Object? value) {
   final raw = _readString(value).toLowerCase();
   final normalized = raw
@@ -164,6 +178,7 @@ String _normalizeStatus(Object? value) {
   return 'Nova';
 }
 
+//Formata numeros grandes 
 String _formatCompact(double value) {
   final abs = value.abs();
   if (abs >= 1000000000) return '${(value / 1000000000).round()}B';

@@ -1,3 +1,4 @@
+//Giovana Uchelli - 25008818
 class UserProfile {
   const UserProfile({
     required this.uid,
@@ -19,6 +20,7 @@ class UserProfile {
   final bool userActive;
   final bool mfaHabilitado;
 
+  //converte um obejto firestore para dart (map)
   factory UserProfile.fromMap(String uid, Map<String, dynamic> map) {
     return UserProfile(
       uid: uid,
@@ -38,7 +40,10 @@ class UserProfile {
     return uid;
   }
 
+  //Gera as iniciais para os avatares  
   String get initials {
+
+    //Divide o nome completo por espaços e remove partes vazias
     final parts = fullName
         .split(RegExp(r'\s+'))
         .where((part) => part.trim().isNotEmpty)
@@ -54,6 +59,7 @@ class UserProfile {
       return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
     }
 
+    //Pega a inicial do primeiro e do ultimo nome    
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }

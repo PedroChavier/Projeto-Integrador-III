@@ -1,3 +1,5 @@
+//Giovana Uchelli - 25008818
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/password_recovery_service.dart';
@@ -23,6 +25,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     super.dispose();
   }
 
+  //AppBar extraido em metodo para nao poluir o build
   PreferredSizeWidget _appBar() {
     return AppBar(
       backgroundColor: Colors.white,
@@ -30,6 +33,8 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.black87),
         onPressed: () {
+
+          //se ja enviou, mostra o form novamente, se nao, sai da tela
           if (_emailEnviado) {
             setState(() => _emailEnviado = false);
           } else {
@@ -51,6 +56,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     );
   }
 
+  //Envia o email e inicia o contador para reenvio
   Future<void> _enviar() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
@@ -91,9 +97,12 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     }
   }
 
+  //reenvia o email - so executa se o contador ja zerou
   Future<void> _reenviar() async {
     if (_resendCountdown > 0) return;
+
     setState(() => _isLoading = true);
+
     try {
       await _service.sendPasswordResetEmail(
         email: _emailController.text.trim(),
@@ -115,6 +124,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     }
   }
 
+  //Decrementa o contador a cada segundo
   void _iniciarContagem() {
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted && _resendCountdown > 0) {
@@ -123,6 +133,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
       }
     });
   }
+
 
   void _mostrarErro(String mensagem) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -134,6 +145,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     );
   }
 
+  //Decoração reutilizada nos campos de texto
   InputDecoration _inputDecoration({required String hint}) {
     return InputDecoration(
       hintText: hint,
@@ -156,6 +168,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     );
   }
 
+  //Botao reutilizado nas duas telas
   Widget _botao({required String label, required VoidCallback? onPressed}) {
     return SizedBox(
       width: double.infinity,
@@ -192,6 +205,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     );
   }
 
+  //Tela 1 - formulario para digitar o email
   Widget _telaEmail() {
     return Column(
       key: const ValueKey('email'),
@@ -234,6 +248,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
     );
   }
 
+  //Tela 2 - confirmação apos envio do email
   Widget _telaConfirmacao() {
     return Column(
       key: const ValueKey('confirmacao'),
@@ -329,6 +344,7 @@ class _RecuperarSenhaScreenState extends State<RecuperarSenhaScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          //Anima a troca entre as telas
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             child: _emailEnviado ? _telaConfirmacao() : _telaEmail(),

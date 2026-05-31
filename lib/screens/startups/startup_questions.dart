@@ -1,3 +1,4 @@
+//Giovana Uchelli - 25008818
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -8,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/chatPrivado_service.dart';
 import '../startups/startup_private_questions.dart';
 
+// Aba de perguntas públicas da startup + acesso ao chat privado
 class PerguntasTab extends StatefulWidget {
   final Startup? startup;
 
@@ -24,10 +26,10 @@ class _PerguntasTabState extends State<PerguntasTab> {
   late final AuthService _authService;
   late final ChatPrivadoService _chatPrivadoService;
 
-  int? _respostaAberta;
-  bool _enviando = false;
-  bool _verificandoAcesso = false;
-  bool? _ehInvestidor;
+  int? _respostaAberta;      // Índice da pergunta com resposta expandida
+  bool _enviando = false;    // Bloqueia o botão enquanto envia
+  bool _verificandoAcesso = false; // Exibe loading no card do chat privado
+  bool? _ehInvestidor;       // null = ainda verificando, true/false = resultado
 
   @override
   void initState() {
@@ -35,9 +37,10 @@ class _PerguntasTabState extends State<PerguntasTab> {
     _service = PerguntaService();
     _authService = AuthService();
     _chatPrivadoService = ChatPrivadoService();
-    _verificarSeInvestidor();
+    _verificarSeInvestidor(); // Verifica se o usuário é investidor ao abrir
   }
 
+  // Consulta o Firestore para saber se o usuário logado é investidor desta startup
   Future<void> _verificarSeInvestidor() async {
     if (widget.startup == null) return;
     final user = FirebaseAuth.instance.currentUser;
@@ -55,41 +58,29 @@ class _PerguntasTabState extends State<PerguntasTab> {
     super.dispose();
   }
 
+  // Gera iniciais do nome: "Ana Souza" → "AS"
   String _iniciais(String nome) {
-    final partes = nome
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
-
-    if (partes.length >= 2) {
-      return '${partes[0][0]}${partes[1][0]}'.toUpperCase();
-    }
-
-    if (partes.length == 1) {
-      return partes[0][0].toUpperCase();
-    }
-
+    final partes = nome.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (partes.length >= 2) return '${partes[0][0]}${partes[1][0]}'.toUpperCase();
+    if (partes.length == 1) return partes[0][0].toUpperCase();
     return '?';
   }
 
+  // Envia uma pergunta pública para a startup
   Future<void> _enviarPergunta() async {
     final texto = _msgController.text.trim();
-
     if (texto.isEmpty || widget.startup == null) return;
 
     final user = FirebaseAuth.instance.currentUser;
-
     if (user == null) return;
 
     setState(() => _enviando = true);
 
     try {
-      final nomeCompleto =
-          await _authService.getUserFullName(user.uid) ?? 'Usuário';
-
+      final nomeCompleto = await _authService.getUserFullName(user.uid) ?? 'Usuário';
       final iniciais = _iniciais(nomeCompleto);
 
+      // Monta o objeto de pergunta com os dados do usuário
       final pergunta = Pergunta(
         id: '',
         idAutor: user.uid,
@@ -102,7 +93,6 @@ class _PerguntasTabState extends State<PerguntasTab> {
       );
 
       await _service.enviarPergunta(pergunta);
-
       _msgController.clear();
     } catch (e) {
       if (mounted) {
@@ -114,12 +104,11 @@ class _PerguntasTabState extends State<PerguntasTab> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _enviando = false);
-      }
+      if (mounted) setState(() => _enviando = false);
     }
   }
 
+  // Verifica se é investidor e redireciona para o chat privado ou exibe bloqueio
   Future<void> _abrirChatPrivado() async {
     if (widget.startup == null) return;
 
@@ -137,9 +126,9 @@ class _PerguntasTabState extends State<PerguntasTab> {
       if (!mounted) return;
 
       if (isInvestidor) {
-        ChatPrivadoScreen.push(context, widget.startup!);
+        ChatPrivadoScreen.push(context, widget.startup!); // Abre o chat
       } else {
-        _mostrarModalBloqueio();
+        _mostrarModalBloqueio(); // Exibe aviso de acesso restrito
       }
     } catch (e) {
       if (mounted) {
@@ -151,12 +140,11 @@ class _PerguntasTabState extends State<PerguntasTab> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _verificandoAcesso = false);
-      }
+      if (mounted) setState(() => _verificandoAcesso = false);
     }
   }
 
+  // Modal explicando que o chat privado é exclusivo para investidores
   void _mostrarModalBloqueio() {
     showModalBottomSheet(
       context: context,
@@ -169,37 +157,23 @@ class _PerguntasTabState extends State<PerguntasTab> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Ícone de cadeado
             Container(
               width: 56,
               height: 56,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF3F5FF),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.lock_rounded,
-                color: Color(0xFF05054F),
-                size: 28,
-              ),
+              decoration: const BoxDecoration(color: Color(0xFFF3F5FF), shape: BoxShape.circle),
+              child: const Icon(Icons.lock_rounded, color: Color(0xFF05054F), size: 28),
             ),
             const SizedBox(height: 16),
             const Text(
               'Canal Exclusivo',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-              ),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.black87),
             ),
             const SizedBox(height: 8),
             const Text(
               'O chat privado é exclusivo para investidores desta startup. Invista para desbloquear esse canal de comunicação.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black54,
-                height: 1.5,
-              ),
+              style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.5),
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -208,19 +182,13 @@ class _PerguntasTabState extends State<PerguntasTab> {
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF05054F),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   elevation: 0,
                 ),
                 child: const Text(
                   'Entendi',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -236,44 +204,36 @@ class _PerguntasTabState extends State<PerguntasTab> {
 
     return Column(
       children: [
+        // Lista de perguntas + card do chat privado no topo
         Expanded(
           child: startup == null
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : StreamBuilder<List<Pergunta>>(
-                  stream: _service.getPerguntasStream(
-                    startup.uid ?? '',
-                  ),
+                  stream: _service.getPerguntasStream(startup.uid ?? ''),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState ==
-                            ConnectionState.waiting &&
-                        !snapshot.hasData) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
+                    // Loading inicial antes do primeiro dado chegar
+                    if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
                     }
 
                     if (snapshot.hasError) {
                       return const Center(
                         child: Text(
                           'Erro ao carregar perguntas.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.black45,
-                          ),
+                          style: TextStyle(fontSize: 14, color: Colors.black45),
                         ),
                       );
                     }
 
                     final perguntas = snapshot.data ?? [];
 
+                    // +1 para o card do chat privado que ocupa o índice 0
                     return ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                       itemCount: perguntas.length + 1,
                       itemBuilder: (context, i) {
 
-                        // CARD CHAT PRIVADO
+                        // Índice 0: card de acesso ao chat privado
                         if (i == 0) {
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 20),
@@ -285,6 +245,7 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(14),
+                                  // Borda destacada se já for investidor
                                   border: Border.all(
                                     color: _ehInvestidor == true
                                         ? const Color.fromARGB(255, 0, 14, 64)
@@ -293,40 +254,33 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                 ),
                                 child: Row(
                                   children: [
-
-                                    // ÍCONE
+                                    // Ícone: cadeado aberto (investidor) ou fechado
                                     Container(
                                       width: 46,
                                       height: 46,
                                       decoration: BoxDecoration(
-                                        color: _ehInvestidor == true
-                                        ? const Color(0xFF05054F)   // era 0xFF1A7A4A
-                                        : const Color.fromARGB(255, 0, 6, 93),
+                                        color: const Color(0xFF05054F),
                                         shape: BoxShape.circle,
                                       ),
                                       child: _verificandoAcesso
+                                          // Loading enquanto verifica o acesso
                                           ? const Padding(
                                               padding: EdgeInsets.all(12),
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(
-                                                  Color(0xFF05054F),
-                                                ),
+                                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF05054F)),
                                               ),
                                             )
                                           : Icon(
                                               _ehInvestidor == true
                                                   ? Icons.lock_open_rounded
                                                   : Icons.lock_outline_rounded,
-                                              color: _ehInvestidor == true
-                                            ? const Color(0xFFF3F5FF)   // era 0xFFEAF5EE
-                                            : const Color(0xFFF3F5FF),
+                                              color: const Color(0xFFF3F5FF),
                                             ),
                                     ),
-
                                     const SizedBox(width: 12),
 
-                                    // TEXTOS
+                                    // Textos informativos do card
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,34 +296,24 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                           const SizedBox(height: 3),
                                           const Text(
                                             'Converse de forma privada com a startup',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.black54,
-                                              height: 1.3,
-                                            ),
+                                            style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.3),
                                           ),
                                           const SizedBox(height: 3),
+                                          // Mensagem diferente para investidor e não-investidor
                                           Text(
                                             _ehInvestidor == true
                                                 ? 'Você já é investidor — toque para entrar'
                                                 : 'Invista para desbloquear esse canal',
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                               fontSize: 11,
-                                              color: _ehInvestidor == true
-                                              ? const Color(0xFF05054F)   // era 0xFF1A7A4A
-                                              : const Color(0xFF05054F),
+                                              color: Color(0xFF05054F),
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-
-                                    const Icon(
-                                      Icons.chevron_right_rounded,
-                                      color: Colors.black26,
-                                      size: 20,
-                                    ),
+                                    const Icon(Icons.chevron_right_rounded, color: Colors.black26, size: 20),
                                   ],
                                 ),
                               ),
@@ -377,8 +321,9 @@ class _PerguntasTabState extends State<PerguntasTab> {
                           );
                         }
 
+                        // Índices 1+: perguntas públicas
                         final p = perguntas[i - 1];
-                        final aberta = _respostaAberta == (i - 1);
+                        final aberta = _respostaAberta == (i - 1); // Resposta expandida?
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
@@ -388,16 +333,13 @@ class _PerguntasTabState extends State<PerguntasTab> {
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-
                                   _Avatar(iniciais: p.iniciaisAutor),
-
                                   const SizedBox(width: 10),
-
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-
+                                        // Nome do autor da pergunta
                                         Text(
                                           p.nomeAutor,
                                           style: const TextStyle(
@@ -406,36 +348,24 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                             color: Colors.black87,
                                           ),
                                         ),
-
                                         const SizedBox(height: 2),
-
+                                        // Texto da pergunta
                                         Text(
                                           p.textoPergunta,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.black54,
-                                          ),
+                                          style: const TextStyle(fontSize: 13, color: Colors.black54),
                                         ),
-
                                         const SizedBox(height: 6),
-
                                         Row(
                                           children: [
-
                                             const Expanded(
-                                              child: Divider(
-                                                height: 1,
-                                                color: Color(0xFFDDDDDD),
-                                              ),
+                                              child: Divider(height: 1, color: Color(0xFFDDDDDD)),
                                             ),
-
                                             const SizedBox(width: 8),
-
+                                            // Alterna entre "Ver resposta" e "Ocultar"
                                             if (p.textoResposta.isNotEmpty)
                                               GestureDetector(
                                                 onTap: () => setState(() {
-                                                  _respostaAberta =
-                                                      aberta ? null : (i - 1);
+                                                  _respostaAberta = aberta ? null : (i - 1);
                                                 }),
                                                 child: Text(
                                                   aberta
@@ -449,6 +379,7 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                                 ),
                                               )
                                             else
+                                              // Pergunta ainda sem resposta
                                               const Text(
                                                 'Aguardando resposta...',
                                                 style: TextStyle(
@@ -465,16 +396,13 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                 ],
                               ),
 
+                              // Resposta expandida — só aparece ao clicar em "Ver resposta"
                               if (aberta && p.textoResposta.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: 44,
-                                    top: 10,
-                                  ),
+                                  padding: const EdgeInsets.only(left: 44, top: 10),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-
                                       Text(
                                         p.nomeStartup,
                                         style: const TextStyle(
@@ -483,9 +411,7 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                           color: Colors.black87,
                                         ),
                                       ),
-
                                       const SizedBox(height: 4),
-
                                       Text(
                                         p.textoResposta,
                                         style: const TextStyle(
@@ -494,15 +420,12 @@ class _PerguntasTabState extends State<PerguntasTab> {
                                           height: 1.5,
                                         ),
                                       ),
-
                                       const SizedBox(height: 6),
-
+                                      // Botão para recolher a resposta
                                       Align(
                                         alignment: Alignment.centerRight,
                                         child: GestureDetector(
-                                          onTap: () => setState(
-                                            () => _respostaAberta = null,
-                                          ),
+                                          onTap: () => setState(() => _respostaAberta = null),
                                           child: const Text(
                                             'Ocultar Resposta',
                                             style: TextStyle(
@@ -525,21 +448,19 @@ class _PerguntasTabState extends State<PerguntasTab> {
                 ),
         ),
 
-        // INPUT
+        // Campo de texto para enviar pergunta pública
         Container(
           color: Colors.white,
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           child: Row(
             children: [
-
+              // Avatar do usuário logado
               _Avatar(
                 iniciais: _iniciais(
                   FirebaseAuth.instance.currentUser?.displayName ?? 'U',
                 ),
               ),
-
               const SizedBox(width: 8),
-
               Expanded(
                 child: TextField(
                   controller: _msgController,
@@ -548,14 +469,8 @@ class _PerguntasTabState extends State<PerguntasTab> {
                   onSubmitted: (_) => _enviando ? null : _enviarPergunta(),
                   decoration: InputDecoration(
                     hintText: 'Enviar Mensagem',
-                    hintStyle: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black38,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
+                    hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: const BorderSide(color: Color(0xFFDDDDDD)),
@@ -564,32 +479,24 @@ class _PerguntasTabState extends State<PerguntasTab> {
                       borderRadius: BorderRadius.circular(8),
                       borderSide: const BorderSide(color: Color(0xFFDDDDDD)),
                     ),
+                    // Borda roxa ao focar no campo
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF6C63FF),
-                        width: 1.5,
-                      ),
+                      borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 1.5),
                     ),
                     filled: true,
                     fillColor: const Color(0xFFF9F9F9),
                   ),
                 ),
               ),
-
               const SizedBox(width: 8),
-
+              // Botão enviar — exibe loading enquanto processa
               ElevatedButton(
                 onPressed: _enviando ? null : _enviarPergunta,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color.fromARGB(255, 5, 5, 79),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   elevation: 0,
                 ),
                 child: _enviando
@@ -598,18 +505,10 @@ class _PerguntasTabState extends State<PerguntasTab> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       )
-                    : const Text(
-                        'Enviar',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white,
-                        ),
-                      ),
+                    : const Text('Enviar', style: TextStyle(fontSize: 13, color: Colors.white)),
               ),
             ],
           ),
@@ -619,6 +518,7 @@ class _PerguntasTabState extends State<PerguntasTab> {
   }
 }
 
+// Avatar circular reutilizável com as iniciais do usuário
 class _Avatar extends StatelessWidget {
   final String iniciais;
 
@@ -629,18 +529,11 @@ class _Avatar extends StatelessWidget {
     return Container(
       width: 34,
       height: 34,
-      decoration: const BoxDecoration(
-        color: Color(0xFFD1CEFF),
-        shape: BoxShape.circle,
-      ),
+      decoration: const BoxDecoration(color: Color(0xFFD1CEFF), shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Text(
         iniciais,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF6C63FF),
-        ),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF6C63FF)),
       ),
     );
   }

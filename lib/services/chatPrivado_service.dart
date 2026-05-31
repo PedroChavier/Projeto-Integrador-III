@@ -1,9 +1,13 @@
+//Giovana Uchelli - 25008818
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/pergunta.dart';
 
+//serviço responsavel pelo canal privado de perguntas
 class ChatPrivadoService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  //Escuta em tempo real as perguntas privadas
   Stream<List<Pergunta>> getPerguntasPrivadasStream({
     required String idStartup,
     required String idInvestidor,
@@ -25,12 +29,13 @@ class ChatPrivadoService {
         });
   }
 
+  //Salva uma nova pergunta privada no Firestore
   Future<void> enviarPerguntaPrivada(Pergunta pergunta) async {
     await _firestore.collection('perguntas').add(pergunta.toMap());
   }
 
   
-
+  //Verifica se o usuario é investidor
   Future<bool> isInvestidor({
     required String idStartup,
     required String idUsuario,

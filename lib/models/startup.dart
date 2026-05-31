@@ -1,14 +1,19 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'empresa.dart';
 import 'enums.dart';
+
 
 class Socio {
   final String nome;
   final String percentual;
   Socio({required this.nome, required this.percentual});
 
+  //constroi um [socio] a partir de um map do firestore
   factory Socio.fromMap(Map<String, dynamic> map) {
-    String s(dynamic v) => v is String ? v : '';
+
+    String s(dynamic v) => v is String ? v : ''; //Garante que é uma string
     return Socio(
       nome: s(map['Nome'] ?? map['nome']),
       percentual: s(map['Percentual'] ?? map['percentual']),
@@ -21,6 +26,7 @@ class Membro {
   final String cargo;
   Membro({required this.nome, required this.cargo});
 
+  //Controi um membro a partir de um map do firetore
   factory Membro.fromMap(Map<String, dynamic> map) {
     String s(dynamic v) => v is String ? v : '';
     return Membro(
@@ -113,7 +119,7 @@ class Startup extends Empresa {
         _dataLancamento = dataLancamento,
         _videoUrl = videoUrl;
 
-  // ── Getters ───────────────────────────────────────────────────
+  //Getters para ler os atributos privados
   String? get uid => _uid;
   String get sigla => _sigla ?? _fallbackSigla();
   String? get descricao => _descricao;
@@ -140,12 +146,13 @@ class Startup extends Empresa {
   DateTime? get dataLancamento => _dataLancamento;
   String? get videoUrl => _videoUrl;
 
+  //Gera uma sigla automatica a parir do nome
   String _fallbackSigla() {
     final clean = (nome ?? '').replaceAll(' ', '');
     return clean.substring(0, clean.length.clamp(0, 4)).toUpperCase();
   }
 
-  // ── Setters ───────────────────────────────────────────────────
+  // setters para alterar atributos privados
   set uid(String? value) => _uid = value;
   set sigla(String? value) => _sigla = value;
   set descricao(String? value) => _descricao = value;
@@ -167,11 +174,13 @@ class Startup extends Empresa {
   set mentores(List<Membro> value) => _mentores = value;
   set videoUrl(String? value) => _videoUrl = value;
 
-  // ── fromFirestore ─────────────────────────────────────────────
+  // Converte um documento do Firestore em objeto Dart (map)
   factory Startup.fromFirestore(String uid, Map<String, dynamic> data) {
-    String? str(dynamic v) => v is String ? v : null;
-    num toNum(dynamic v) => v is num ? v : 0;
 
+    String? str(dynamic v) => v is String ? v : null; //verifica se é uma string
+    num toNum(dynamic v) => v is num ? v : 0; //verifica se é um numero
+
+    //converte uma lista dinamica Firestore em um map
     List<Socio> parseSocios(dynamic raw) {
       if (raw is! List) return [];
       return raw
@@ -196,12 +205,14 @@ class Startup extends Empresa {
           .toList();
     }
 
+    //converte o Timestamp do Firestore para DateTime
     DateTime? createdAt;
     try {
       final ts = data['createdAt'];
       if (ts is Timestamp) createdAt = ts.toDate();
     } catch (_) {}
 
+    //converte o Timestamp do firestore para DateTime
     DateTime? dataLancamento;
     try {
       final ts = data['data_lancamento'] ?? data['dataLancamento'];
@@ -242,11 +253,13 @@ class Startup extends Empresa {
     );
   }
 
+  //Filra apenas os valores do tipo String de uma lista dinamica do firestore
   static List<String> _parseStringList(dynamic raw) {
     if (raw is! List) return [];
     return raw.whereType<String>().toList();
   }
 
+  //Converte uma string do firestore para o enum [EstagioDesenvolvimento]
   static EstagioDesenvolvimento _parseEstagio(String? valor) {
     switch (valor) {
       case 'emOperacao':

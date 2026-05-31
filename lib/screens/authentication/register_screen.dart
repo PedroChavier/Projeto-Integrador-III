@@ -1,19 +1,24 @@
-import 'dart:math';
+//Pedro Andre do Carmo Chavier -25018639
+
+import 'dart:math'; //Randon.secure() para a geraçãi de senha aleatoria
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; //TextInputFormatter para mascaras de CPF, data e telefone
 
 import '../../models/usuario.dart';
 import '../../services/auth_service.dart';
 import '../../services/registration_service.dart';
 
+//Regras de senha
 const int _senhaMinLength = 8;
 const int _senhaMaxLength = 20;
-final RegExp _senhaUppercaseRegex = RegExp(r'[A-Z]');
-final RegExp _senhaLowercaseRegex = RegExp(r'[a-z]');
-final RegExp _senhaNumberRegex = RegExp(r'[0-9]');
-final RegExp _senhaSpecialRegex = RegExp(r'[^A-Za-z0-9]');
+final RegExp _senhaUppercaseRegex = RegExp(r'[A-Z]'); //Pelo menos uma maiuscula
+final RegExp _senhaLowercaseRegex = RegExp(r'[a-z]'); //Pelo menos uma minuscula
+final RegExp _senhaNumberRegex = RegExp(r'[0-9]'); // pelo menos um numero
+final RegExp _senhaSpecialRegex = RegExp(r'[^A-Za-z0-9]'); // pelo menos um especial
+
+//Caracteres usados na geraçãi de senha aletoria
 const String _caracteresMaiusculos = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const String _caracteresMinusculos = 'abcdefghijklmnopqrstuvwxyz';
 const String _caracteresNumericos = '0123456789';
@@ -27,7 +32,9 @@ class CadastroScreen extends StatefulWidget {
 }
 
 class _CadastroScreenState extends State<CadastroScreen> {
-  final Random _random = Random.secure();
+  final Random _random = Random.secure(); //gerados criptograficamente seguro
+
+  //controllers para cada campo do formulario
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
   final _cpfController = TextEditingController();
@@ -46,6 +53,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
   @override
   void initState() {
     super.initState();
+
+    //ouve mudanças nos campos para atualizar as cores de bordas e requisitos de senha
     _nomeController.addListener(_atualizarEstadoCampos);
     _emailController.addListener(_atualizarEstadoCampos);
     _cpfController.addListener(_atualizarEstadoCampos);
@@ -68,12 +77,14 @@ class _CadastroScreenState extends State<CadastroScreen> {
     super.dispose();
   }
 
+  //força a reconstrução da tela para atualizar cores de borda e outros estados visuais
   void _atualizarEstadoCampos() {
     if (mounted) {
       setState(() {});
     }
   }
 
+  //Limpa a confirmação de senha se a senha for apagasa
   void _atualizarEstadoSenhas() {
     if (_senhaController.text.isEmpty && _confirmarSenhaController.text.isNotEmpty) {
       _confirmarSenhaController.clear();
@@ -84,8 +95,9 @@ class _CadastroScreenState extends State<CadastroScreen> {
     }
   }
 
+  //Valida todos os campos e cria a conta no Firebase
   Future<void> _criarConta() async {
-    FocusScope.of(context).unfocus();
+    FocusScope.of(context).unfocus(); //fecha o teclado antes de começar
 
     final nome = _nomeController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
@@ -170,7 +182,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
 
       if (!mounted) return;
 
-      // Fazer logout após oferecer 2FA
+      // Desloga imediatmente após o cadastro
       try {
         await _authService.signOut();
       } catch (error) {
@@ -180,10 +192,13 @@ class _CadastroScreenState extends State<CadastroScreen> {
       if (!mounted) return;
       _limparCampos();
       _mostrarMensagem('Conta criada com sucesso. Agora voce ja pode entrar.');
-      Navigator.of(context).maybePop();
+      Navigator.of(context).maybePop(); // volta a tela
+
     } on FirebaseAuthException catch (error) {
       _mostrarMensagem(_mensagemAuth(error), isError: true);
+
     } catch (error) {
+
       debugPrint('Erro inesperado no cadastro: $error');
       _mostrarMensagem(
         'Nao foi possivel concluir o cadastro agora.',
@@ -196,6 +211,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     }
   }
 
+  //Limpa todos os campos do formulario
   void _limparCampos() {
     _nomeController.clear();
     _emailController.clear();
@@ -206,28 +222,35 @@ class _CadastroScreenState extends State<CadastroScreen> {
     _confirmarSenhaController.clear();
   }
 
+  //Limpa apenas os campos de senha
   void _limparSenhas() {
     _senhaController.clear();
     _confirmarSenhaController.clear();
     _mostrarMensagem('Campos de senha limpos.');
   }
 
+  //Gera uma senha aleatoria que preenche todos os requisitos e preenche os dois campos
   void _gerarSenhaAleatoria() {
     final comprimento =
         _senhaMinLength + 7 + _random.nextInt(_senhaMaxLength - 14);
+
     final caracteresObrigatorios = [
       _sortearCaractere(_caracteresMaiusculos),
       _sortearCaractere(_caracteresMinusculos),
       _sortearCaractere(_caracteresNumericos),
       _sortearCaractere(_caracteresEspeciais),
     ];
+
     final todosCaracteres =
         '$_caracteresMaiusculos$_caracteresMinusculos$_caracteresNumericos$_caracteresEspeciais';
+    
+    //completa o restante com caracteres aleatorios e embaralha
     final senha = <String>[
       ...caracteresObrigatorios,
+
       for (int i = caracteresObrigatorios.length; i < comprimento; i++)
         _sortearCaractere(todosCaracteres),
-    ]..shuffle(_random);
+    ]..shuffle(_random); //suffle: embaralha os elementos da lista
 
     final senhaGerada = senha.join();
     _senhaController.text = senhaGerada;
@@ -235,10 +258,12 @@ class _CadastroScreenState extends State<CadastroScreen> {
     _mostrarMensagem('Senha aleatoria gerada e preenchida.');
   }
 
+  //sorteia um caractere aleatorio de uma string
   String _sortearCaractere(String caracteres) {
     return caracteres[_random.nextInt(caracteres.length)];
   }
 
+  //snackbar verde (sucesso) ou vermelha (erro)
   void _mostrarMensagem(String mensagem, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -249,7 +274,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     );
   }
 
-
+  //traduz codigos de erro do firebase para mensagens amigaveis
   String _mensagemAuth(FirebaseAuthException error) {
     switch (error.code) {
       case 'email-already-in-use':
@@ -269,48 +294,61 @@ class _CadastroScreenState extends State<CadastroScreen> {
     }
   }
 
+  //valida formato de email com regex
   bool _isValidEmail(String value) {
     return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value);
   }
 
+  //valida cpf verificando formato e digitos verificadores
   bool _isValidCpf(String value) {
     final cpf = _normalizarCpf(value);
 
     if (cpf.length != 11) return false;
     if (!RegExp(r'^\d{10}[\dX]$').hasMatch(cpf)) return false;
-    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;
+    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false; //rejeita todos iguals (0000000)
 
-    if (cpf.endsWith('X')) {
+    if (cpf.endsWith('X')) { //cpfs terminados em x sao validos
       return true;
     }
 
+    //calcula e verifica os dois digitos verificadores
     int calcularDigito(int length) {
       var soma = 0;
+      //soma os digitos multiplicados pelos seus respectivos pesos
       for (int i = 0; i < length; i++) {
         soma += int.parse(cpf[i]) * ((length + 1) - i);
       }
 
       final resto = soma % 11;
+
+      //se resto for menor que 2, o digito é 0
+      //caso contario, o digito é 11 menos o resto
       return resto < 2 ? 0 : 11 - resto;
     }
 
     final primeiroDigito = calcularDigito(9);
     final segundoDigito = calcularDigito(10);
 
+
+    //confere se os digitos verficadores calculados sao iguais aos dois ultimos digitos informados no cpf
     return cpf[9] == primeiroDigito.toString() &&
         cpf[10] == segundoDigito.toString();
   }
 
+
+  //remove tudo que nao for digito
   String _somenteDigitos(String value) {
     return value.replaceAll(RegExp(r'[^0-9]'), '');
   }
 
+  //remove a formatação do cpf, mantendo apenas digitos e X
   String _normalizarCpf(String value) {
     return value
         .toUpperCase()
         .replaceAll(RegExp(r'[^0-9X]'), '');
   }
 
+  //converte string para DateTime
   DateTime? _parseDataNascimento(String value) {
     final partes = value.split('/');
     if (partes.length != 3) return null;
@@ -321,13 +359,14 @@ class _CadastroScreenState extends State<CadastroScreen> {
 
     if (dia == null || mes == null || ano == null) return null;
 
+    //Monta a data no formato ISO
     final data = DateTime.tryParse(
       '${ano.toString().padLeft(4, '0')}-${mes.toString().padLeft(2, '0')}-${dia.toString().padLeft(2, '0')}',
     );
 
     if (data == null) return null;
     if (data.year != ano || data.month != mes || data.day != dia) return null;
-    if (data.isAfter(DateTime.now())) return null;
+    if (data.isAfter(DateTime.now())) return null; //data no futuro é invalida
 
     return data;
   }
@@ -347,6 +386,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
     return idade >= 18;
   }
 
+
+  //Getters para ler os atributos privados
   bool get _senhaFoiPreenchida => _senhaController.text.isNotEmpty;
   bool get _senhaEstaEmFoco => _senhaFocusNode.hasFocus;
   bool get _mostrarRequisitosSenha =>
@@ -362,6 +403,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     final senha = _senhaController.text;
     return senha.length >= _senhaMinLength && senha.length <= _senhaMaxLength;
   }
+  //somente se todos os requisitos foram atendudos simultaneamente
   bool get _senhaAtendePolitica =>
       _senhaTemTamanhoValido &&
       _senhaTemMaiuscula &&
@@ -369,6 +411,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
       _senhaTemNumero &&
       _senhaTemEspecial;
 
+  //Getters de cor de borda: verde = valido, vermelho: invalido, null = neutro
   Color? get _corBordaNome {
     if (_nomeController.text.trim().isEmpty) return null;
     return Colors.green;
@@ -434,6 +477,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     return null;
   }
 
+  //Linha de requisito de senha: icone de checkbox + texto verde se atendido
   Widget _itemRegraSenha({
     required bool atendida,
     required String texto,
@@ -462,6 +506,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     );
   }
 
+  //Decoração reutilizada em todos os campos
   InputDecoration _inputDecoration({
     required String hint,
     Widget? suffixIcon,
@@ -493,6 +538,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
     );
   }
 
+  //Label reutilizado acima de cada campo
   Widget _label(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -554,10 +600,11 @@ class _CadastroScreenState extends State<CadastroScreen> {
                 style: TextStyle(fontSize: 14, color: Colors.black45),
               ),
               const SizedBox(height: 32),
+
               _label('Nome completo*'),
               TextField(
                 controller: _nomeController,
-                textCapitalization: TextCapitalization.words,
+                textCapitalization: TextCapitalization.words, //Capitalizar cada palavra
                 enabled: !_isLoading,
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
                 decoration: _inputDecoration(
@@ -567,6 +614,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
               _label('E-mail'),
               TextField(
                 controller: _emailController,
@@ -580,6 +628,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
               _label('CPF*'),
               TextField(
                 controller: _cpfController,
@@ -603,8 +652,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
                 keyboardType: TextInputType.number,
                 enabled: !_isLoading,
                 inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  _DataInputFormatter(),
+                  FilteringTextInputFormatter.digitsOnly, //Bloqueia letras
+                  _DataInputFormatter(), // aplica mascara DD/MM/AAAA
                 ],
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
                 decoration: _inputDecoration(
@@ -613,7 +662,9 @@ class _CadastroScreenState extends State<CadastroScreen> {
                   focusedBorderColor: _corBordaDataNascimento,
                 ),
               ),
+
               const SizedBox(height: 20),
+
               _label('Telefone*'),
               TextField(
                 controller: _telefoneController,
@@ -626,7 +677,9 @@ class _CadastroScreenState extends State<CadastroScreen> {
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
                 decoration: _inputDecoration(hint: '(00) 00000-0000'),
               ),
+
               const SizedBox(height: 20),
+
               _label('Senha*'),
               TextField(
                 controller: _senhaController,
@@ -641,19 +694,22 @@ class _CadastroScreenState extends State<CadastroScreen> {
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+
                       IconButton(
                         tooltip: 'Limpar senhas',
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
+                        constraints: const BoxConstraints( //Define altura e largura minima que widget pode ter
                           minWidth: 36,
                           minHeight: 36,
                         ),
+
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(
                           Icons.cleaning_services_outlined,
                           color: Colors.black38,
                           size: 20,
                         ),
+
                         onPressed: _isLoading ? null : _limparSenhas,
                       ),
                       IconButton(
@@ -680,6 +736,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
                           minWidth: 36,
                           minHeight: 36,
                         ),
+
+                        //reduz o espaçamento interno do widget, deixando mais compacto
                         visualDensity: VisualDensity.compact,
                         icon: Icon(
                           _obscureSenha
@@ -760,6 +818,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                 controller: _confirmarSenhaController,
                 obscureText: _obscureConfirmarSenha,
                 enabled: !_isLoading,
+                //impede a edição do campo (true)
                 readOnly: !_senhaFoiPreenchida,
                 onTap: () {
                   if (_senhaFoiPreenchida || _isLoading) return;
@@ -836,31 +895,45 @@ class _CadastroScreenState extends State<CadastroScreen> {
   }
 }
 
+// ── Formatadores de entrada (máscaras aplicadas enquanto o usuário digita) ────
+
+// Formata CPF como 000.000.000-0X em tempo real
+
 class _CpfInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+
     final rawValue = newValue.text.toUpperCase();
+    //Armazena o CPF formatado
     final buffer = StringBuffer();
     var count = 0;
 
     for (final char in rawValue.characters) {
       if (count >= 11) break;
-
+      
+      //verifica se o caractere é um numero
       final isDigit = RegExp(r'\d').hasMatch(char);
+      //Permite X apenas na ultima posição
       final isFinalX = char == 'X' && count == 10;
 
       if (!isDigit && !isFinalX) continue;
 
+      //Adiciona os separadores da mascara do CPF
       if (count == 3 || count == 6) buffer.write('.');
       if (count == 9) buffer.write('-');
+
+      //Add o Caractere valido
       buffer.write(char);
       count++;
     }
 
+    //Converte o conteudo acumulado no buffer para uma string
     final str = buffer.toString();
+
+    //retorna o texto formatado e posiciona o cursor no final
     return newValue.copyWith(
       text: str,
       selection: TextSelection.collapsed(offset: str.length),
@@ -868,19 +941,25 @@ class _CpfInputFormatter extends TextInputFormatter {
   }
 }
 
+//Formata data com DD/MM/AAAA
 class _DataInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    final buffer = StringBuffer();
+
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), ''); //so aceita digitos
+    final buffer = StringBuffer(); //Buffer monta uma string aos poucos
+
+    //Adiciona os digitos e insere as barras nas posições corretas
     for (int i = 0; i < digits.length && i < 8; i++) {
       if (i == 2 || i == 4) buffer.write('/');
       buffer.write(digits[i]);
     }
     final str = buffer.toString();
+
+    //Atualiza o texto formatado e adiciona o cursor no final
     return newValue.copyWith(
       text: str,
       selection: TextSelection.collapsed(offset: str.length),
@@ -888,14 +967,21 @@ class _DataInputFormatter extends TextInputFormatter {
   }
 }
 
+//Formata o telefone no padrao (xx) xxxxx-xxxx
 class _TelefoneInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+
+    //Remove qualquer caractere que nao seja numero
     final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+
+    //Monta o telefone formato aos poucos
     final buffer = StringBuffer();
+
+    //Adiciona os digitos e insere os caracteres da mascara
     for (int i = 0; i < digits.length && i < 11; i++) {
       if (i == 0) buffer.write('(');
       if (i == 2) buffer.write(') ');

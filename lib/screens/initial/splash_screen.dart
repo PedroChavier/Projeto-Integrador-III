@@ -1,3 +1,5 @@
+//Giovana Uchelli - 25008818
+
 import 'package:flutter/material.dart';
 import 'inicio_screen.dart';
 
@@ -17,7 +19,7 @@ class _SplashScreenState extends State<SplashScreen> {
     // Aguarda 2 segundos e vai para a próxima tela
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).pushReplacement( //Remove a splash da pilha
           MaterialPageRoute(builder: (_) => const InicioScreen()),
         );
       }

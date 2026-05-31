@@ -1,20 +1,25 @@
+//Pedro Andre do Carmo Chavier -25018639
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/usuario.dart';
 
+//serviço resposavel pelo cadastro de novos usuarios
 class RegistrationService {
   final FirebaseAuth _authService = FirebaseAuth.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
-    region: 'southamerica-east1',
+    region: 'southamerica-east1', //regiao de sao paulo
   );
 
+  //registrar um novo usuario
   Future<void> registerUser(Usuario usuario, {required String senha}) async {
     final email = usuario.email?.trim().toLowerCase();
     final cpf = usuario.cpf
         ?.trim()
         .toUpperCase()
-        .replaceAll(RegExp(r'[^0-9X]'), '');
+        .replaceAll(RegExp(r'[^0-9X]'), ''); //Remove tudo q nao for numero
+    
     final nome = usuario.fullName?.trim();
     final telefone = usuario.telefone?.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -42,6 +47,7 @@ class RegistrationService {
     }
 
     try {
+      //Criar a conta no firebaseAuth
       final credential = await _authService.createUserWithEmailAndPassword(
         email: email,
         password: senha,
@@ -56,25 +62,32 @@ class RegistrationService {
         );
       }
 
+      //atualiza o nome de exibiçãi no perfil do Firebase Auth
       if (nome != null && nome.isNotEmpty) {
         await currentUser.updateDisplayName(nome);
       }
 
+      //Força a renovação do token, garantinfo que a claude function
+      // reconheça o user recem criado
       await currentUser.getIdToken(true);
 
+      //Salva os dados complementares no Firestore via Cloud Function
       final callable = _functions.httpsCallable('registrarUsuario');
       await callable.call(<String, dynamic>{
         'cpf': cpf,
         'fullName': nome,
-        'dataNascimento': usuario.dataNascimento?.toIso8601String(),
+        'dataNascimento': usuario.dataNascimento?.toIso8601String(), // converte para o padrao internacional de Datas e horarios
         'email': email,
         'telefone': telefone,
         'mfaHabilitado': usuario.mfaHabilitado,
         'userActive': usuario.userActive,
       });
     } on FirebaseException catch (error) {
-      final createdUser = _authService.currentUser;
 
+      
+      final createdUser = _authService.currentUser;
+      
+      //deleta a conta caso alguma etapa falhar
       if (createdUser != null) {
         await createdUser.delete().catchError((_) {});
       }
@@ -104,7 +117,7 @@ class RegistrationService {
         await createdUser.delete().catchError((_) {});
       }
 
-      rethrow;
+      rethrow; //Relança a exceção
     }
   }
 }

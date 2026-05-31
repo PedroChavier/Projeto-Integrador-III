@@ -1,5 +1,8 @@
-import 'enums.dart';
+//Pedro Andre do Carmo Chavier -25018639
 
+import 'enums.dart'; 
+
+//Modelo que representa uma oferta de negociação de tokens entre investidores
 class OfertaNegociacao {
   String? _idInvestidor;
   String? _idToken;
@@ -20,7 +23,7 @@ class OfertaNegociacao {
        _tipoOferta = tipoOferta,
        _quantidadeTokens = quantidadeTokens,
        _valorSugerido = valorSugerido,
-       _dataOferta = DateTime.now();
+       _dataOferta = DateTime.now(); //Pega a data atual
 
   // Getters
   String? get idInvestidor => _idInvestidor;
