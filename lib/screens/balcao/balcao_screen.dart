@@ -1,9 +1,7 @@
-//Pedro Andre do Carmo Chavier -25018639
-
-import 'dart:async'; // Fornece [StreamSubscription] e [Timer] para gerenciar streams e contadores
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Fornece [FilteringTextInputFormatter], que limita entrada a números
+import 'package:flutter/services.dart';
 
 import '../../models/orderbook_models.dart';
 import '../../models/wallet_holding.dart';
@@ -11,58 +9,59 @@ import '../../services/auth_service.dart';
 import '../../services/balcao_service.dart';
 import '../home/home_screen.dart';
 
-/// Tela principal do balcão de negociação de tokens.
-/// Exibe o livro de ordens, carteira, histórico de trades e painel de ação
 class BalcaoScreen extends StatefulWidget {
-  final int abaInicial; // 0 = compra, 1 = venda
+  final int abaInicial;
+  final String? startupId;
 
-  const BalcaoScreen({super.key, this.abaInicial = 0});
+  const BalcaoScreen({super.key, this.abaInicial = 0, this.startupId});
 
   @override
   State<BalcaoScreen> createState() => _BalcaoScreenState();
 }
 
 class _BalcaoScreenState extends State<BalcaoScreen> {
-  // ── Paleta de cores ────────────────────────────────────────────────────────
-  static const _buyColor  = Color(0xFF2E7D32); // verde — compra
-  static const _buySoft   = Color(0xFFF0F7F3); // verde claro — fundo de compra
-  static const _sellColor = Color(0xFFE53935); // vermelho — venda
-  static const _sellSoft  = Color(0xFFFEF3F1); // vermelho claro — fundo de venda
-  static const _ink       = Color(0xFF121212); // texto principal
-  static const _muted     = Color(0xFF6E6E73); // texto secundário
-  static const _card      = Color(0xFFF8F8F3); // fundo de cards
-  static const _border    = Color(0xFFE2E3D8); // bordas
-  static const _mine      = Color(0xFFE8F0FB); // destaque das ordens do usuário
-  static const _accent    = Color(0xFF173B7A); // azul escuro — cor principal da marca
+  static const _buyColor = Color(0xFF2E7D32);
+  static const _buySoft = Color(0xFFF0F7F3);
+  static const _sellColor = Color(0xFFE53935);
+  static const _sellSoft = Color(0xFFFEF3F1);
+  static const _ink = Color(0xFF121212);
+  static const _muted = Color(0xFF6E6E73);
+  static const _card = Color(0xFFF8F8F3);
+  static const _border = Color(0xFFE2E3D8);
+  static const _mine = Color(0xFFE8F0FB);
+  static const _accent = Color(0xFF173B7A);
 
   late OrderbookState _orderbookState;
   late final TextEditingController _priceController;
   late final TextEditingController _qtyController;
   final ScrollController _scrollController = ScrollController();
-
-  // Chave usada para rolar a tela até o painel de ação ao clicar em uma ordem do book
   final GlobalKey _actionPanelKey = GlobalKey();
 
   final _service = BalcaoService();
 
-  bool _submitting      = false; // true enquanto uma ordem está sendo enviada
-  bool _dropdownAberto  = false; // controla a visibilidade do seletor de startups
-  bool _loadingStartups = true;  // true enquanto a lista de startups está carregando
-  String _marketQuickMode  = 'balance'; // modo de preenchimento rápido: 'balance' ou 'tokens'
-  bool _showQuickSlider    = false;     // exibe ou oculta o slider de percentual
-  double _quickSliderPct   = 50;        // valor atual do slider (percentual)
+  bool _submitting = false;
+  bool _dropdownAberto = false;
+  bool _loadingStartups = true;
+  String _marketQuickMode = 'balance';
+  bool _showQuickSlider = false;
+  double _quickSliderPct = 50;
+  int _stepIndex = 2; // índice em _stepValues: passo ativo dos botões +/−
 
-  List<Startup> _startups      = [];
-  int _startupSelecionada      = 0;
+  // Magnitudes do stepper de quantidade (substitui as 12 teclas +/−)
+  static const List<int> _stepValues = [1, 10, 100, 1000, 10000, 100000];
 
-  // Mapa de posições do usuário em todas as startups: startupId → total de tokens
+  List<Startup> _startups = [];
+  int _startupSelecionada = 0;
+
+  // Posições do usuário em todas as startups: startupId -> total tokens
   Map<String, int> _posicoes = const {};
   StreamSubscription<List<WalletHolding>>? _posicoesSub;
 
-  // Subscriptions dos streams da startup selecionada — canceladas ao trocar de startup
+  // Stream subscriptions – cancelled on startup change and dispose
   StreamSubscription<(List<Order>, List<Order>)>? _ordersSub;
   StreamSubscription<List<Trade>>? _tradesSub;
-  StreamSubscription<({double? lastPrice, int tokensVendidos, int tokensEmitidos})>? _stateSub;
+  StreamSubscription<
+      ({double? lastPrice, int tokensVendidos, int tokensEmitidos})>? _stateSub;
   StreamSubscription<Wallet>? _walletSub;
   StreamSubscription<({int tokensLivres, int tokensReservados})>? _positionSub;
 
@@ -70,16 +69,16 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
   void initState() {
     super.initState();
     _priceController = TextEditingController();
-    _qtyController   = TextEditingController();
-
-    // Estado inicial vazio enquanto as startups são carregadas
+    _qtyController = TextEditingController();
     _orderbookState = OrderbookState(
       wallet: Wallet(brl: 0, tokens: 0, tokensReserved: 0),
       currentStartup: Startup(
-          id: '', nome: '...', sigla: '...', precoEmissao: 0, tokensEmitidos: 0),
+          id: '',
+          nome: '...',
+          sigla: '...',
+          precoEmissao: 0,
+          tokensEmitidos: 0),
     );
-
-    // Escuta as posições do usuário em todas as startups para exibir no seletor
     _posicoesSub = _service.watchHoldings().listen((holdings) {
       if (!mounted) return;
       setState(() {
@@ -88,33 +87,38 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         };
       });
     });
-
     _loadStartups();
   }
 
-  /// Busca a lista de startups e inicializa a primeira como selecionada
   Future<void> _loadStartups() async {
     try {
       final startups = await _service.fetchStartups();
       if (!mounted) return;
+      int initialIndex = 0;
+      if (widget.startupId != null) {
+        final found =
+            startups.indexWhere((s) => s.id == widget.startupId);
+        if (found >= 0) initialIndex = found;
+      }
       setState(() {
-        _startups        = startups;
+        _startups = startups;
+        _startupSelecionada = initialIndex;
         _loadingStartups = false;
       });
       if (startups.isNotEmpty) {
-        // Abre na aba de venda se [abaInicial] for 1; caso contrário compra
-        _applyStartup(0, initialTab: widget.abaInicial == 1 ? 'sell' : 'buy');
+        _applyStartup(initialIndex,
+            initialTab: widget.abaInicial == 1 ? 'sell' : 'buy');
       }
     } catch (_) {
       if (mounted) setState(() => _loadingStartups = false);
     }
   }
 
-  /// Aplica a startup selecionada: cancela streams anteriores e inicia novos
   void _applyStartup(int index, {String? initialTab}) {
     if (index >= _startups.length) return;
     final startup = _startups[index];
 
+    // Cancel previous subscriptions
     _cancelSubscriptions();
     _clearInputs();
 
@@ -123,29 +127,24 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
     final startupId = startup.id;
 
-    // Escuta a carteira do usuário em tempo real
     _walletSub = _service.watchWallet().listen((w) {
       if (mounted) _orderbookState.updateWallet(w);
     });
 
-    // Escuta a posição do usuário nesta startup específica
     _positionSub = _service.watchPosition(startupId).listen((pos) {
       if (mounted) {
         _orderbookState.updatePosition(pos.tokensLivres, pos.tokensReservados);
       }
     });
 
-    // Escuta o livro de ordens (compra e venda) em tempo real
     _ordersSub = _service.watchOrders(startupId).listen((books) {
       if (mounted) _orderbookState.updateBothBooks(books.$1, books.$2);
     });
 
-    // Escuta o histórico de trades em tempo real
     _tradesSub = _service.watchTrades(startupId).listen((t) {
       if (mounted) _orderbookState.updateTrades(t);
     });
 
-    // Escuta o estado do balcão: último preço e tokens vendidos
     _stateSub = _service.watchBalcaoState(startupId).listen((s) {
       if (mounted) {
         _orderbookState.updateStartupState(s.lastPrice, s.tokensVendidos);
@@ -153,52 +152,46 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     });
   }
 
-  /// Cancela todos os streams da startup atual e limpa as referências
   void _cancelSubscriptions() {
     _ordersSub?.cancel();
     _tradesSub?.cancel();
     _stateSub?.cancel();
     _walletSub?.cancel();
     _positionSub?.cancel();
-    _ordersSub   = null;
-    _tradesSub   = null;
-    _stateSub    = null;
-    _walletSub   = null;
+    _ordersSub = null;
+    _tradesSub = null;
+    _stateSub = null;
+    _walletSub = null;
     _positionSub = null;
   }
 
-  /// Troca a startup selecionada preservando a aba e o tipo de ordem atuais
   void _changeStartup(int index) {
-    final previousTab       = _orderbookState.currentTab;
+    final previousTab = _orderbookState.currentTab;
     final previousOrderType = _orderbookState.orderType;
     setState(() {
       _startupSelecionada = index;
-      _dropdownAberto     = false;
+      _dropdownAberto = false;
     });
     _applyStartup(index, initialTab: previousTab);
     _orderbookState.setOrderType(previousOrderType);
   }
 
-  /// Limpa os campos de preço, quantidade e os controles de preenchimento rápido
   void _clearInputs() {
     _priceController.clear();
     _qtyController.clear();
     _orderbookState.inputPrice = 0;
-    _orderbookState.inputQty   = 0;
-    _marketQuickMode  = 'balance';
-    _showQuickSlider  = false;
-    _quickSliderPct   = 50;
+    _orderbookState.inputQty = 0;
+    _marketQuickMode = 'balance';
+    _showQuickSlider = false;
+    _quickSliderPct = 50;
+    _stepIndex = 2;
   }
 
-  /// Preenche o campo de preço com o valor clicado no livro de ordens
-  /// e rola a tela até o painel de ação
   void _fillFromBook(double price) {
     _orderbookState.setOrderType('limit');
     _priceController.text = price.toStringAsFixed(2).replaceAll('.', ',');
     _orderbookState.inputPrice = price;
     setState(() {});
-
-    // Aguarda o frame renderizar antes de rolar para o painel
     Future.delayed(const Duration(milliseconds: 80), () {
       final ctx = _actionPanelKey.currentContext;
       if (ctx != null) {
@@ -208,19 +201,17 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     });
   }
 
-  /// Retorna a sigla da startup para exibição no badge e nos cards
   String _ticker(Startup s) => s.sigla;
 
-  /// Retorna o texto de estado do mercado da startup
   String _stateText(Startup s) =>
       s.lastPrice == null ? 'Preço de emissão' : 'Mercado ativo';
 
-  /// Verifica se a venda está bloqueada pelo lock-up da startup.
-  /// Ambas as condições (quantidade e tempo) devem estar desbloqueadas para vender
+  // Retorna true quando qualquer lock-up impede a venda.
+  // Ambos devem estar desbloqueados simultaneamente para vender.
   bool _isSellLocked(OrderbookState state, Startup startup) {
     if (startup.lockupDesabilitado) return false;
 
-    // Lock-up por quantidade: verifica se a startup vendeu o mínimo exigido
+    // Lock-up por valor (global)
     bool valorUnlocked = true;
     if (startup.lockupQuantidadeTipo != null && startup.lockupQuantidadeValor > 0) {
       final vendidos = state.startupTokensVendidos;
@@ -230,7 +221,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       valorUnlocked = vendidos >= required;
     }
 
-    // Lock-up por tempo: verifica se já passou o período mínimo desde o lançamento
+    // Lock-up por tempo (modelo IPO): contado a partir de data_lancamento da startup.
     bool tempoUnlocked = true;
     if (startup.lockupDiasMinimo > 0 && startup.dataLancamento != null) {
       final unlockMs = startup.dataLancamento!.millisecondsSinceEpoch +
@@ -238,7 +229,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       tempoUnlocked = DateTime.now().millisecondsSinceEpoch >= unlockMs;
     }
 
-    // Venda só é permitida quando ambos os locks estiverem desbloqueados
     return !(valorUnlocked && tempoUnlocked);
   }
 
@@ -254,7 +244,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Exibe um spinner enquanto as startups estão sendo carregadas
     if (_loadingStartups) {
       return Scaffold(
         backgroundColor: const Color.fromARGB(255, 255, 255, 255),
@@ -262,12 +251,15 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              // Linha gradiente decorativa no topo
               Container(
                 height: 2,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFFE040FB), Color(0xFFFF6B6B)],
+                    colors: [
+                      Color(0xFF6C63FF),
+                      Color(0xFFE040FB),
+                      Color(0xFFFF6B6B),
+                    ],
                   ),
                 ),
               ),
@@ -281,11 +273,10 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       );
     }
 
-    // [AnimatedBuilder] reconstrói apenas o necessário quando [_orderbookState] mudar
     return AnimatedBuilder(
       animation: _orderbookState,
       builder: (context, _) {
-        final state   = _orderbookState;
+        final state = _orderbookState;
         final startup = state.currentStartup;
         final isPositive = startup.variation >= 0;
 
@@ -299,7 +290,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   height: 2,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF6C63FF), Color(0xFFE040FB), Color(0xFFFF6B6B)],
+                      colors: [
+                        Color(0xFF6C63FF),
+                        Color(0xFFE040FB),
+                        Color(0xFFFF6B6B),
+                      ],
                     ),
                   ),
                 ),
@@ -315,7 +310,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                         _buildStartupSelector(startup),
                         const SizedBox(height: 14),
                         _buildWalletCards(state, startup),
-                        // Exibe CTA de crédito simulado se o saldo estiver zerado
                         if (state.wallet.brl <= 0) ...[
                           const SizedBox(height: 12),
                           _buildEmptyWalletCta(),
@@ -345,7 +339,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── HERO ───────────────────────────────────────────────────────────────────
 
-  /// Card principal com preço, variação, chips de resumo e barra de progresso da emissão
   Widget _buildHero(OrderbookState state, Startup startup, bool isPositive) {
     final progress = state.startupSaleProgress.clamp(0.0, 1.0);
 
@@ -355,6 +348,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color.fromARGB(255, 227, 227, 227)),
+        
+        
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,30 +363,37 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   children: [
                     const Text(
                       'Balcão de Tokens',
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _ink),
+                      style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: _ink),
                     ),
                     const SizedBox(height: 5),
                     const Text(
                       'Negociação simulada em tempo real.',
-                      style: TextStyle(fontSize: 12, color: _muted, height: 1.4),
+                      style:
+                          TextStyle(fontSize: 12, color: _muted, height: 1.4),
                     ),
                     const SizedBox(height: 14),
-                    // Chips de resumo: preço de emissão, % vendido e spread
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _buildChip('Emissão', state.formatPrice(startup.precoEmissao)),
-                        _buildChip('Vendido', '${(progress * 100).toStringAsFixed(1)}%'),
-                        _buildChip('Spread',
-                            state.spread > 0 ? state.formatPrice(state.spread) : '—'),
+                        _buildChip(
+                            'Emissão', state.formatPrice(startup.precoEmissao)),
+                        _buildChip('Vendido',
+                            '${(progress * 100).toStringAsFixed(1)}%'),
+                        _buildChip(
+                            'Spread',
+                            state.spread > 0
+                                ? state.formatPrice(state.spread)
+                                : '—'),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 16),
-              // Preço atual e badge de variação (verde/vermelho)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -402,7 +404,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   ),
                   const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: isPositive ? _buySoft : _sellSoft,
                       borderRadius: BorderRadius.circular(999),
@@ -421,16 +424,18 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Barra de progresso da emissão com contagem de tokens
           Row(
             children: [
-              const Text('Progresso da emissão',
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w700, color: _muted)),
+              const Text(
+                'Progresso da emissão',
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: _muted),
+              ),
               const Spacer(),
               Text(
                 '${state.formatQty(state.startupTokensVendidos)} / ${state.formatQty(startup.tokensEmitidos)}',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _ink),
+                style: const TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600, color: _ink),
               ),
             ],
           ),
@@ -444,14 +449,12 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               valueColor: const AlwaysStoppedAnimation<Color>(_accent),
             ),
           ),
-          // Cards de lock-up (exibidos apenas se a startup tiver regras de lock-up)
           ..._buildLockupInfo(state, startup),
         ],
       ),
     );
   }
 
-  /// Chip de resumo com rótulo e valor — usado no hero para emissão, vendido e spread
   Widget _buildChip(String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -480,10 +483,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Constrói os cards de lock-up (por quantidade e por tempo) se aplicável.
-  /// Retorna lista vazia se a startup não tiver nenhuma regra de lock-up
   List<Widget> _buildLockupInfo(OrderbookState state, Startup startup) {
-    final hasQtd   = startup.lockupQuantidadeTipo != null && startup.lockupQuantidadeValor > 0;
+    final hasQtd = startup.lockupQuantidadeTipo != null &&
+        startup.lockupQuantidadeValor > 0;
     final hasTempo = startup.lockupDiasMinimo > 0;
 
     if (!hasQtd && !hasTempo) return [];
@@ -494,31 +496,35 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         children: [
           const Icon(Icons.lock_outline, size: 13, color: _muted),
           const SizedBox(width: 4),
-          const Text('Lock-up',
-              style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700, color: _muted)),
+          const Text(
+            'Lock-up',
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: _muted),
+          ),
         ],
       ),
       const SizedBox(height: 8),
     ];
 
-    // Lock-up por quantidade de tokens vendidos
     if (hasQtd) {
       final vendidos = state.startupTokensVendidos;
       final int required;
       final String metaLabel;
       if (startup.lockupQuantidadeTipo == 'percentual') {
-        required    = (startup.lockupQuantidadeValor * startup.tokensEmitidos).ceil();
-        final pct   = (startup.lockupQuantidadeValor * 100).toStringAsFixed(0);
-        metaLabel   = 'meta: $pct% dos tokens emitidos';
+        required =
+            (startup.lockupQuantidadeValor * startup.tokensEmitidos).ceil();
+        final pct = (startup.lockupQuantidadeValor * 100).toStringAsFixed(0);
+        metaLabel = 'meta: $pct% dos tokens emitidos';
       } else {
-        required  = startup.lockupQuantidadeValor.toInt();
-        metaLabel = 'meta: ${state.formatQty(required)} ${startup.sigla} vendidos';
+        required = startup.lockupQuantidadeValor.toInt();
+        metaLabel =
+            'meta: ${state.formatQty(required)} ${startup.sigla} vendidos';
       }
       final percorrido = vendidos.clamp(0, required);
-      final falta      = (required - percorrido).clamp(0, required);
-      final progress   = required > 0 ? (percorrido / required).clamp(0.0, 1.0) : 1.0;
-      final unlocked   = falta == 0;
+      final falta = (required - percorrido).clamp(0, required);
+      final progress =
+          required > 0 ? (percorrido / required).clamp(0.0, 1.0) : 1.0;
+      final unlocked = falta == 0;
 
       widgets.add(_buildLockupCard(
         icon: Icons.bar_chart_rounded,
@@ -527,14 +533,15 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         progress: progress,
         unlocked: unlocked,
         percorridoLabel: '${state.formatQty(percorrido)} ${startup.sigla} vendidos',
-        faltaLabel: unlocked ? 'Desbloqueado' : 'Faltam ${state.formatQty(falta)} ${startup.sigla}',
+        faltaLabel: unlocked
+            ? 'Desbloqueado'
+            : 'Faltam ${state.formatQty(falta)} ${startup.sigla}',
       ));
     }
 
-    // Lock-up por tempo desde o lançamento da startup
     if (hasTempo) {
       final lancamento = startup.dataLancamento;
-      final totalDias  = startup.lockupDiasMinimo;
+      final totalDias = startup.lockupDiasMinimo;
       double? tempoProgress;
       bool tempoUnlocked = false;
       String percorridoTempoLabel;
@@ -543,15 +550,15 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       if (lancamento != null) {
         final diasDecorridos =
             DateTime.now().difference(lancamento).inDays.clamp(0, totalDias);
-        final diasFaltando  = totalDias - diasDecorridos;
-        tempoProgress       = (diasDecorridos / totalDias).clamp(0.0, 1.0);
-        tempoUnlocked       = diasFaltando == 0;
+        final diasFaltando = totalDias - diasDecorridos;
+        tempoProgress = (diasDecorridos / totalDias).clamp(0.0, 1.0);
+        tempoUnlocked = diasFaltando == 0;
         percorridoTempoLabel = '$diasDecorridos de $totalDias dias decorridos';
-        faltaTempoLabel     = tempoUnlocked ? 'Desbloqueado' : 'Faltam $diasFaltando dias';
+        faltaTempoLabel =
+            tempoUnlocked ? 'Desbloqueado' : 'Faltam $diasFaltando dias';
       } else {
-        // Data de lançamento não definida — exibe aviso genérico
         percorridoTempoLabel = 'carência de $totalDias dias por compra';
-        faltaTempoLabel      = 'data de lançamento não definida';
+        faltaTempoLabel = 'data de lançamento não definida';
       }
 
       widgets.add(_buildLockupCard(
@@ -568,7 +575,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     return widgets;
   }
 
-  /// Card visual de lock-up — verde se desbloqueado, âmbar se ainda bloqueado
   Widget _buildLockupCard({
     required IconData icon,
     required String title,
@@ -578,11 +584,16 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     required String percorridoLabel,
     required String faltaLabel,
   }) {
-    final accent      = unlocked ? const Color(0xFF2E7D32) : const Color(0xFFB8860B);
-    final bg          = unlocked ? const Color(0xFFF0F7F3) : const Color(0xFFFFF8E1);
-    final borderColor = unlocked ? const Color(0xFFA5D6A7) : const Color(0xFFFFE082);
-    final barColor    = unlocked ? const Color(0xFF2E7D32) : const Color(0xFFFFB300);
-    final textStrong  = unlocked ? const Color(0xFF1B5E20) : const Color(0xFF7B5800);
+    final accent =
+        unlocked ? const Color(0xFF2E7D32) : const Color(0xFFB8860B);
+    final bg =
+        unlocked ? const Color(0xFFF0F7F3) : const Color(0xFFFFF8E1);
+    final borderColor =
+        unlocked ? const Color(0xFFA5D6A7) : const Color(0xFFFFE082);
+    final barColor =
+        unlocked ? const Color(0xFF2E7D32) : const Color(0xFFFFB300);
+    final textStrong =
+        unlocked ? const Color(0xFF1B5E20) : const Color(0xFF7B5800);
 
     return Container(
       width: double.infinity,
@@ -600,20 +611,24 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             children: [
               Icon(icon, size: 13, color: accent),
               const SizedBox(width: 5),
-              Text(title,
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w700, color: accent)),
+              Text(
+                title,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: accent),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   subtitle,
-                  style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.75)),
+                  style: TextStyle(
+                      fontSize: 10, color: accent.withValues(alpha: 0.75)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          // Barra de progresso do lock-up (ausente quando a data de lançamento não está definida)
           if (progress != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
@@ -630,13 +645,18 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           Row(
             children: [
               Expanded(
-                child: Text(percorridoLabel,
-                    style: TextStyle(
-                        fontSize: 10, color: accent.withValues(alpha: 0.8))),
+                child: Text(
+                  percorridoLabel,
+                  style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.8)),
+                ),
               ),
-              Text(faltaLabel,
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w700, color: textStrong)),
+              Text(
+                faltaLabel,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: textStrong),
+              ),
             ],
           ),
         ],
@@ -646,15 +666,15 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── STARTUP SELECTOR ───────────────────────────────────────────────────────
 
-  /// Dropdown que lista todas as startups disponíveis para negociação.
-  /// Exibe badge com quantidade de tokens do usuário quando aplicável
   Widget _buildStartupSelector(Startup startup) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Startup',
-            style: TextStyle(
-                fontSize: 12, color: _muted, fontWeight: FontWeight.w600)),
+        const Text(
+          'Startup',
+          style: TextStyle(
+              fontSize: 12, color: _muted, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 6),
         AnimatedContainer(
           duration: const Duration(milliseconds: 150),
@@ -665,12 +685,12 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           ),
           child: Column(
             children: [
-              // Cabeçalho do dropdown — exibe a startup selecionada
               InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: () => setState(() => _dropdownAberto = !_dropdownAberto),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   child: Row(
                     children: [
                       _TickerBadge(ticker: _ticker(startup), color: _accent),
@@ -679,20 +699,23 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(startup.nome,
-                                style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: _ink)),
+                            Text(
+                              startup.nome,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: _ink,
+                              ),
+                            ),
                             const SizedBox(height: 3),
                             Text(
                               '${_stateText(startup)}  ·  ${_orderbookState.formatQty(startup.tokensEmitidos)} ${_ticker(startup)}',
-                              style: const TextStyle(fontSize: 11, color: _muted),
+                              style:
+                                  const TextStyle(fontSize: 11, color: _muted),
                             ),
                           ],
                         ),
                       ),
-                      // Seta animada que rotaciona ao abrir/fechar o dropdown
                       AnimatedRotation(
                         turns: _dropdownAberto ? 0.5 : 0,
                         duration: const Duration(milliseconds: 200),
@@ -703,10 +726,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   ),
                 ),
               ),
-              // Lista de startups exibida quando o dropdown está aberto
               if (_dropdownAberto)
                 ...List.generate(_startups.length, (index) {
-                  final item     = _startups[index];
+                  final item = _startups[index];
                   final selected = index == _startupSelecionada;
                   final positive = item.variation >= 0;
                   final qtdTokens = _posicoes[item.id] ?? 0;
@@ -717,7 +739,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                           horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         border: const Border(top: BorderSide(color: _border)),
-                        color: selected ? const Color(0xFFF4F7FB) : Colors.white,
+                        color:
+                            selected ? const Color(0xFFF4F7FB) : Colors.white,
                       ),
                       child: Row(
                         children: [
@@ -731,11 +754,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(item.nome,
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: selected ? _accent : _ink)),
+                                Text(
+                                  item.nome,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: selected ? _accent : _ink,
+                                  ),
+                                ),
                                 const SizedBox(height: 3),
                                 Text(
                                   '${_orderbookState.formatPrice(item.displayPrice)}  ·  ${item.variationText}',
@@ -748,7 +774,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                               ],
                             ),
                           ),
-                          // Badge com quantidade de tokens do usuário nessa startup
                           if (qtdTokens > 0) ...[
                             const SizedBox(width: 8),
                             Container(
@@ -761,14 +786,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                               child: Text(
                                 '${_orderbookState.formatQty(qtdTokens)} ${_ticker(item)}',
                                 style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: _accent),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: _accent,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 6),
                           ],
-                          // Ícone de check na startup selecionada
                           if (selected)
                             const Icon(Icons.check_circle_rounded,
                                 color: _accent, size: 18),
@@ -786,10 +811,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── WALLET CARDS ───────────────────────────────────────────────────────────
 
-  /// Três cards side-by-side: saldo disponível, tokens em carteira e tokens reservados
   Widget _buildWalletCards(OrderbookState state, Startup startup) {
     final ticker = _ticker(startup);
-    // Exibe hint de saldo reservado em ordens abertas, se houver
     final brlReservedHint = state.wallet.brlReserved > 0
         ? 'R\$ ${state.wallet.brlReserved.toStringAsFixed(2).replaceAll('.', ',')} em ordens'
         : null;
@@ -826,7 +849,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Card individual da carteira com ícone, rótulo, valor e subtítulo opcional
   Widget _buildWalletCard(
     String label,
     String value,
@@ -846,23 +868,28 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         children: [
           Icon(icon, size: 16, color: iconColor),
           const SizedBox(height: 8),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 10, color: _muted, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: const TextStyle(
+                fontSize: 10, color: _muted, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 3),
-          // [FittedBox] reduz o texto automaticamente se não couber no card
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value,
-                style: const TextStyle(
-                    fontSize: 14, color: _ink, fontWeight: FontWeight.w800)),
+            child: Text(
+              value,
+              style: const TextStyle(
+                  fontSize: 14, color: _ink, fontWeight: FontWeight.w800),
+            ),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
-            Text(subtitle,
-                style: const TextStyle(
-                    fontSize: 9, color: _muted, fontWeight: FontWeight.w600)),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                  fontSize: 9, color: _muted, fontWeight: FontWeight.w600),
+            ),
           ],
         ],
       ),
@@ -871,10 +898,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── EMPTY WALLET CTA ───────────────────────────────────────────────────────
 
-  // Valor fixo de crédito simulado adicionado por vez
   static const double _creditoSimuladoValor = 50000;
 
-  /// Banner exibido quando o usuário não tem saldo, com botão para adicionar crédito simulado
   Widget _buildEmptyWalletCta() {
     return Container(
       width: double.infinity,
@@ -904,9 +929,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Sem saldo de teste',
-                    style: TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w800, color: _ink)),
+                Text(
+                  'Sem saldo de teste',
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w800, color: _ink),
+                ),
                 SizedBox(height: 2),
                 Text(
                   'Adicione crédito simulado para começar a negociar.',
@@ -926,15 +953,16 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('+ R\$ 50.000',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+            child: const Text(
+              '+ R\$ 50.000',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Chama o serviço para creditar saldo simulado e exibe feedback ao usuário
   Future<void> _handleAddSimulatedCredit() async {
     setState(() => _submitting = true);
     try {
@@ -958,7 +986,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── SPREAD BAR ─────────────────────────────────────────────────────────────
 
-  /// Barra que exibe melhor compra, spread e melhor venda com botão de ajuda
   Widget _buildSpreadBar(OrderbookState state) {
     final bestBid = state.bestBid?.price;
     final bestAsk = state.bestAsk?.price;
@@ -973,11 +1000,13 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       child: Row(
         children: [
           Expanded(
-            child: _buildSpreadItem('Melhor compra',
-                bestBid == null ? '—' : state.formatPrice(bestBid),
-                _buyColor, CrossAxisAlignment.start),
+            child: _buildSpreadItem(
+              'Melhor compra',
+              bestBid == null ? '—' : state.formatPrice(bestBid),
+              _buyColor,
+              CrossAxisAlignment.start,
+            ),
           ),
-          // Botão central com o valor do spread e ícone de informação
           GestureDetector(
             onTap: () => _showInfoDialog(
               context,
@@ -987,18 +1016,22 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                  color: _card, borderRadius: BorderRadius.circular(8)),
+                color: _card,
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Column(
                 children: [
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('SPREAD',
-                          style: TextStyle(
-                              fontSize: 9,
-                              color: _muted,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5)),
+                      const Text(
+                        'SPREAD',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: _muted,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5),
+                      ),
                       const SizedBox(width: 3),
                       Icon(Icons.info_outline_rounded,
                           size: 10, color: _muted.withOpacity(0.7)),
@@ -1015,16 +1048,18 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
           ),
           Expanded(
-            child: _buildSpreadItem('Melhor venda',
-                bestAsk == null ? '—' : state.formatPrice(bestAsk),
-                _sellColor, CrossAxisAlignment.end),
+            child: _buildSpreadItem(
+              'Melhor venda',
+              bestAsk == null ? '—' : state.formatPrice(bestAsk),
+              _sellColor,
+              CrossAxisAlignment.end,
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Item individual da spread bar (compra ou venda)
   Widget _buildSpreadItem(
       String label, String value, Color color, CrossAxisAlignment alignment) {
     return Column(
@@ -1043,7 +1078,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── ORDER BOOK ─────────────────────────────────────────────────────────────
 
-  /// Grid lado a lado com os livros de compra e venda
   Widget _buildOrderBookGrid(OrderbookState state) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1055,13 +1089,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Um lado do livro de ordens (compra ou venda) com cabeçalho, linhas e volume total
   Widget _buildBookSide(OrderbookState state, String side) {
-    final isBuy       = side == 'buy';
-    final orders      = isBuy ? state.sortedBuyBook : state.sortedSellBook;
-    final headerColor     = isBuy ? _buySoft : _sellSoft;
+    final isBuy = side == 'buy';
+    final orders = isBuy ? state.sortedBuyBook : state.sortedSellBook;
+    final headerColor = isBuy ? _buySoft : _sellSoft;
     final headerTextColor = isBuy ? _buyColor : _sellColor;
-    final maxQty  = orders.isEmpty ? 1 : orders.map((o) => o.qty).reduce((a, b) => a > b ? a : b);
+    final maxQty = orders.isEmpty
+        ? 1
+        : orders.map((o) => o.qty).reduce((a, b) => a > b ? a : b);
     final totalVol = orders.fold(0, (sum, o) => sum + o.qty);
 
     return Container(
@@ -1072,7 +1107,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       ),
       child: Column(
         children: [
-          // Cabeçalho colorido com ícone de direção e contagem de ordens
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
@@ -1083,40 +1117,47 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             child: Row(
               children: [
                 Icon(
-                  isBuy ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                  isBuy
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded,
                   size: 14,
                   color: headerTextColor,
                 ),
                 const SizedBox(width: 6),
-                Text(isBuy ? 'COMPRA' : 'VENDA',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: headerTextColor)),
+                Text(
+                  isBuy ? 'COMPRA' : 'VENDA',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: headerTextColor),
+                ),
                 const Spacer(),
-                Text('${orders.length} ordens',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: headerTextColor.withOpacity(0.7))),
+                Text(
+                  '${orders.length} ordens',
+                  style: TextStyle(
+                      fontSize: 10, color: headerTextColor.withOpacity(0.7)),
+                ),
               ],
             ),
           ),
-          // Rótulos das colunas
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Row(
               children: const [
                 Expanded(
-                    child: Text('Preço',
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: _muted,
-                            fontWeight: FontWeight.w700))),
-                Text('Qtd',
+                  child: Text(
+                    'Preço',
                     style: TextStyle(
                         fontSize: 10,
                         color: _muted,
-                        fontWeight: FontWeight.w700)),
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  'Qtd',
+                  style: TextStyle(
+                      fontSize: 10, color: _muted, fontWeight: FontWeight.w700),
+                ),
               ],
             ),
           ),
@@ -1124,27 +1165,30 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           if (orders.isEmpty)
             _buildEmptyBookSide(isBuy)
           else
-            // Exibe até 8 ordens por lado
             ...orders.take(8).map(
                 (order) => _buildOrderRow(state, order, side, isBuy, maxQty)),
-          // Rodapé com volume total do lado
           if (orders.isNotEmpty) ...[
             const Divider(height: 1, color: Color(0xFFF0F0EA)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const Text('Vol. total',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: _muted,
-                          fontWeight: FontWeight.w600)),
+                  Text(
+                    'Vol. total',
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: _muted,
+                        fontWeight: FontWeight.w600),
+                  ),
                   const Spacer(),
-                  Text(state.formatQty(totalVol),
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: headerTextColor,
-                          fontWeight: FontWeight.w800)),
+                  Text(
+                    state.formatQty(totalVol),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: headerTextColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1154,7 +1198,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Placeholder exibido quando não há ordens em um lado do livro
   Widget _buildEmptyBookSide(bool isBuy) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
@@ -1169,12 +1212,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           Text(
             'Sem ordens de\n${isBuy ? 'compra' : 'venda'}',
             textAlign: TextAlign.center,
-            style:
-                const TextStyle(fontSize: 12, color: Color(0xFFB9B9B9), height: 1.4),
+            style: const TextStyle(
+                fontSize: 12, color: Color(0xFFB9B9B9), height: 1.4),
           ),
           const SizedBox(height: 6),
           Text(
-            isBuy ? 'Seja o primeiro a ofertar.' : 'Coloque uma ordem de venda.',
+            isBuy
+                ? 'Seja o primeiro a ofertar.'
+                : 'Coloque uma ordem de venda.',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 10, color: Color(0xFFCCCCCC)),
           ),
@@ -1183,8 +1228,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Linha de uma ordem no livro com barra de profundidade proporcional ao volume,
-  /// destaque para ordens do próprio usuário e botão de cancelamento
   Widget _buildOrderRow(
     OrderbookState state,
     Order order,
@@ -1192,18 +1235,17 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     bool isBuy,
     int maxQty,
   ) {
-    final isMine        = state.myOrderIds.contains(order.id);
-    final priceColor    = isBuy ? _buyColor : _sellColor;
-    final depthColor    = isBuy ? _buyColor.withOpacity(0.09) : _sellColor.withOpacity(0.09);
+    final isMine = state.myOrderIds.contains(order.id);
+    final priceColor = isBuy ? _buyColor : _sellColor;
+    final depthColor =
+        isBuy ? _buyColor.withOpacity(0.09) : _sellColor.withOpacity(0.09);
     final depthFraction = (order.qty / maxQty).clamp(0.0, 1.0);
-    final stopA         = (depthFraction - 0.001).clamp(0.0, 1.0);
+    final stopA = (depthFraction - 0.001).clamp(0.0, 1.0);
 
     return GestureDetector(
-      // Toque preenche o campo de preço com o valor desta ordem
       onTap: () => _fillFromBook(order.price),
       child: Stack(
         children: [
-          // Barra de profundidade em gradiente proporcional ao volume da ordem
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -1219,7 +1261,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              // Destaque azul claro para ordens do próprio usuário
               color: isMine ? _mine.withOpacity(0.7) : Colors.transparent,
               border: const Border(top: BorderSide(color: Color(0xFFF0F0EA))),
             ),
@@ -1232,20 +1273,22 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                       Text(
                         state.formatPrice(order.price),
                         style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: priceColor),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: priceColor,
+                        ),
                       ),
-                      // Rótulo secundário: primária / sua ordem / parcial
                       if (order.isStartup)
                         const Text('primária',
                             style: TextStyle(fontSize: 9, color: _muted))
                       else if (isMine)
-                        const Text('sua ordem',
-                            style: TextStyle(
-                                fontSize: 9,
-                                color: _accent,
-                                fontWeight: FontWeight.w600))
+                        const Text(
+                          'sua ordem',
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: _accent,
+                              fontWeight: FontWeight.w600),
+                        )
                       else if (order.isPartiallyExecuted)
                         const Text('parcial',
                             style: TextStyle(fontSize: 9, color: _muted)),
@@ -1255,22 +1298,25 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(state.formatQty(order.qty),
-                        style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _muted)),
-                    // Botão de cancelamento visível apenas nas ordens do usuário
+                    Text(
+                      state.formatQty(order.qty),
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _muted),
+                    ),
                     if (isMine)
                       GestureDetector(
                         onTap: () => _handleCancelOrder(order.id),
                         child: const Padding(
                           padding: EdgeInsets.only(top: 3),
-                          child: Text('cancelar',
-                              style: TextStyle(
-                                  fontSize: 9,
-                                  color: _sellColor,
-                                  fontWeight: FontWeight.w700)),
+                          child: Text(
+                            'cancelar',
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: _sellColor,
+                                fontWeight: FontWeight.w700),
+                          ),
                         ),
                       ),
                   ],
@@ -1283,7 +1329,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Legenda explicativa das cores e interações do livro de ordens
   Widget _buildBookLegend() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1299,8 +1344,10 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             children: [
               const Icon(Icons.touch_app_outlined, size: 11, color: _muted),
               const SizedBox(width: 4),
-              const Text('Toque em um preço para usá-lo',
-                  style: TextStyle(fontSize: 10, color: _muted)),
+              const Text(
+                'Toque em um preço para usá-lo',
+                style: TextStyle(fontSize: 10, color: _muted),
+              ),
             ],
           ),
         ],
@@ -1308,7 +1355,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Item individual da legenda com quadrado colorido e rótulo
   Widget _buildLegendItem(Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1330,36 +1376,34 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── ACTION PANEL ───────────────────────────────────────────────────────────
 
-  /// Painel de criação de ordens com abas compra/venda, tipo de ordem,
-  /// campos de preço e quantidade, preenchimento rápido e resumo
   Widget _buildActionPanel(OrderbookState state, Startup startup) {
-    final isBuy      = state.currentTab == 'buy';
-    final isMarket   = state.orderType == 'market';
+    final isBuy = state.currentTab == 'buy';
+    final isMarket = state.orderType == 'market';
     final isSellLocked = !isBuy && _isSellLocked(state, startup);
     final actionColor = isBuy ? _buyColor : _sellColor;
-    final actionSoft  = isBuy ? _buySoft : _sellSoft;
-    final ticker      = _ticker(startup);
+    final actionSoft = isBuy ? _buySoft : _sellSoft;
+    final ticker = _ticker(startup);
 
-    // Valor estimado da ordem — calculado diferente para market e limit
     final estimatedTotal = isMarket
         ? state.estimateMarketTotal(state.currentTab, state.inputQty)
         : (state.inputQty > 0 && state.inputPrice > 0
             ? state.inputQty * state.inputPrice
             : null);
-
     final averagePrice = isMarket
         ? state.estimateAverageMarketPrice(state.currentTab, state.inputQty)
-        : state.inputPrice > 0 ? state.inputPrice : null;
+        : state.inputPrice > 0
+            ? state.inputPrice
+            : null;
 
-    // Fração do saldo/portfólio que será usada pela ordem atual
-    final brlDisponivel       = state.wallet.brlDisponivel;
+    // balance usage for buy: cost / available_brl (líquido — descontado o reservado)
+    final brlDisponivel = state.wallet.brlDisponivel;
     final balanceUsageFraction = isBuy
         ? (estimatedTotal != null && brlDisponivel > 0
-            ? estimatedTotal / brlDisponivel : 0.0)
+            ? estimatedTotal / brlDisponivel
+            : 0.0)
         : (state.inputQty > 0 && state.wallet.tokens > 0
-            ? state.inputQty / state.wallet.tokens : 0.0);
-
-    // true se a ordem ultrapassar o saldo ou os tokens disponíveis
+            ? state.inputQty / state.wallet.tokens
+            : 0.0);
     final isOverBudget = isBuy
         ? (estimatedTotal != null && estimatedTotal > brlDisponivel)
         : (state.inputQty > state.wallet.tokens);
@@ -1375,30 +1419,41 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Abas Comprar / Vender
+          // Buy / Sell tabs
           Row(
             children: [
               Expanded(
-                child: _buildTabButton('Comprar', state.currentTab == 'buy',
-                    _buySoft, _buyColor, () => state.setTab('buy')),
+                child: _buildTabButton(
+                  'Comprar',
+                  state.currentTab == 'buy',
+                  _buySoft,
+                  _buyColor,
+                  () => state.setTab('buy'),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildTabButton('Vender', state.currentTab == 'sell',
-                    _sellSoft, _sellColor, () => state.setTab('sell')),
+                child: _buildTabButton(
+                  'Vender',
+                  state.currentTab == 'sell',
+                  _sellSoft,
+                  _sellColor,
+                  () => state.setTab('sell'),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-
-          // Seleção do tipo de ordem: Market ou Limit
+          // Order type
           _buildSectionLabel('Tipo de ordem'),
           const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
                 child: _buildOrderTypeButton(
-                  'Market', 'imediata', Icons.bolt_rounded,
+                  'Market',
+                  'imediata',
+                  Icons.bolt_rounded,
                   state.orderType == 'market',
                   () => state.setOrderType('market'),
                   infoLabel: 'O que é Market?',
@@ -1409,7 +1464,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: _buildOrderTypeButton(
-                  'Limit', 'no book', Icons.price_check_rounded,
+                  'Limit',
+                  'no book',
+                  Icons.price_check_rounded,
                   state.orderType == 'limit',
                   () => state.setOrderType('limit'),
                   infoLabel: 'O que é Limit?',
@@ -1420,12 +1477,13 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Dica contextual que muda conforme o tipo de ordem
+          // Hint card
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-                color: actionSoft, borderRadius: BorderRadius.circular(10)),
+              color: actionSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Text(
               isMarket
                   ? 'Executa imediatamente contra as melhores ofertas do book.'
@@ -1434,8 +1492,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
           ),
           const SizedBox(height: 14),
-
-          // Campo de preço — exibido apenas para ordens Limit
+          // Price field (limit only)
           if (!isMarket) ...[
             _buildSectionLabel('Preço por token (R\$)'),
             const SizedBox(height: 6),
@@ -1444,167 +1501,37 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               onChanged: (v) => setState(() {
                 state.inputPrice = double.tryParse(v.replaceAll(',', '.')) ?? 0;
               }),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: _inputDec(hint: 'Ex: 2,50'),
             ),
             const SizedBox(height: 14),
           ],
-
-          // Campo de quantidade
-          _buildSectionLabel('Quantidade de tokens'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _qtyController,
-            onChanged: (v) => setState(() {
-              state.inputQty = int.tryParse(v) ?? 0;
-            }),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: _inputDec(hint: 'Ex: 100'),
-          ),
-          const SizedBox(height: 8),
-
-          // Botões de preenchimento rápido por percentual
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          // Quantidade — stepper com campo editável central + seletor de passo
+          Row(
             children: [
-              const Text('Rápido:',
-                  style: TextStyle(
-                      fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
-              _buildPercentChip(actionColor, actionSoft, state, isBuy),
-              // Modos de cálculo rápido exclusivos para Market orders
-              if (isMarket) ...[
-                _buildQuickModeButton('Saldo',
-                    selected: _marketQuickMode == 'balance',
-                    color: actionColor,
-                    onTap: () {
-                      setState(() => _marketQuickMode = 'balance');
-                      _applyQuickFill(_quickSliderPct, state, isBuy);
-                    }),
-                _buildQuickModeButton('Tokens',
-                    selected: _marketQuickMode == 'tokens',
-                    color: actionColor,
-                    onTap: () {
-                      setState(() => _marketQuickMode = 'tokens');
-                      _applyQuickFill(_quickSliderPct, state, isBuy);
-                    }),
-              ],
-              // Botões de atalho 25%, 50%, 75%, 100% e Máx
-              ...[25, 50, 75, 100].map(
-                (pct) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _buildQuickFillButton('$pct%', pct, state, isBuy),
+              _buildSectionLabel('Quantidade de tokens'),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => _showInfoDialog(
+                  context,
+                  'Como ajustar a quantidade',
+                  'Digite direto no campo, ou use − e + para somar/subtrair o passo selecionado.\n\nMantenha − ou + pressionado para repetir rápido. O atalho "Preenchimento rápido" calcula a quantidade por uma porcentagem do seu saldo (ou tokens).',
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: GestureDetector(
-                  onTap: () => _applyMaxFill(state, isBuy),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: _card,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _border, width: 1.5),
-                    ),
-                    child: const Text('Máx',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: _ink,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
+                child: Icon(Icons.help_outline_rounded,
+                    size: 15, color: _muted.withOpacity(0.7)),
               ),
             ],
           ),
-          // Explicação do modo de cálculo rápido selecionado
-          if (isMarket) ...[
-            const SizedBox(height: 6),
-            Text(
-              _marketQuickMode == 'balance'
-                  ? (isBuy
-                      ? 'Percentual sobre seu saldo em reais.'
-                      : 'Percentual do saldo em reais convertido pela liquidez do book comprador.')
-                  : (isBuy
-                      ? 'Percentual dos tokens disponíveis no book de venda.'
-                      : 'Percentual dos seus tokens livres para venda.'),
-              style: const TextStyle(fontSize: 10, color: _muted),
-            ),
-          ],
-          const SizedBox(height: 12),
-
-          // Botões de incremento de quantidade
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text('Incrementar:',
-                  style: TextStyle(
-                      fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
-              for (final increment in [1, 10, 100, 1000, 10000, 100000])
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: GestureDetector(
-                    onTap: () => _incrementQuantity(increment, state, isBuy),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _card,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: _border),
-                      ),
-                      child: Text('+$increment',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              color: _ink,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ),
-            ],
-          ),
           const SizedBox(height: 8),
-
-          // Botões de decremento de quantidade
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text('Decrementar:',
-                  style: TextStyle(
-                      fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
-              for (final decrement in [1, 10, 100, 1000, 10000, 100000])
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: GestureDetector(
-                    onTap: () => _decrementQuantity(decrement, state, isBuy),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _card,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: _border),
-                      ),
-                      child: Text('-$decrement',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              color: _ink,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          _buildQtyStepper(state, isBuy, actionColor, actionSoft),
+          const SizedBox(height: 10),
+          _buildStepSelector(actionColor),
+          const SizedBox(height: 16),
+          // Preenchimento rápido (% do saldo / portfólio + ajuste fino)
+          _buildQuickFillSection(
+              state, isBuy, isMarket, actionColor, actionSoft),
           const SizedBox(height: 6),
-
-          // Slider de ajuste fino — animado, visível apenas quando ativado
           AnimatedSize(
             duration: const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
@@ -1625,19 +1552,26 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.tune_rounded, size: 12, color: actionColor),
+                            Icon(Icons.tune_rounded,
+                                size: 12, color: actionColor),
                             const SizedBox(width: 6),
-                            Text('Ajuste fino',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: actionColor,
-                                    fontWeight: FontWeight.w700)),
+                            Text(
+                              'Ajuste fino',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: actionColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             const Spacer(),
-                            Text('${_quickSliderPct.round()}%',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: actionColor,
-                                    fontWeight: FontWeight.w800)),
+                            Text(
+                              '${_quickSliderPct.round()}%',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: actionColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ],
                         ),
                         SliderTheme(
@@ -1647,9 +1581,10 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                             thumbColor: actionColor,
                             overlayColor: actionColor.withOpacity(0.12),
                             trackHeight: 4,
-                            // Thumb customizado que cresce conforme o valor aumenta
                             thumbShape: const _GrowingThumbShape(
-                                minRadius: 6, maxRadius: 14),
+                              minRadius: 6,
+                              maxRadius: 14,
+                            ),
                             showValueIndicator: ShowValueIndicator.never,
                           ),
                           child: Slider(
@@ -1668,18 +1603,15 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   ),
           ),
           const SizedBox(height: 8),
-
-          // Hint de saldo disponível (reais ou tokens conforme a aba)
+          // Contextual balance hint
           _buildBalanceHint(state, isBuy, ticker),
           const SizedBox(height: 12),
-
-          // Barra de uso do saldo — exibida apenas quando há quantidade digitada
+          // Balance usage bar
           if (state.inputQty > 0 && (estimatedTotal != null || !isBuy)) ...[
             _buildBalanceBar(balanceUsageFraction, isOverBudget, isBuy, state),
             const SizedBox(height: 14),
           ],
-
-          // Card de resumo da ordem com projeções de saldo e tokens
+          // Summary
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
@@ -1694,25 +1626,29 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               children: [
                 Row(
                   children: [
-                    const Text('Resumo da ordem',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: _ink)),
-                    // Badge de alerta quando o saldo é insuficiente
+                    const Text(
+                      'Resumo da ordem',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _ink),
+                    ),
                     if (isOverBudget) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                            color: _sellSoft,
-                            borderRadius: BorderRadius.circular(4)),
-                        child: const Text('Saldo insuficiente',
-                            style: TextStyle(
-                                fontSize: 9,
-                                color: _sellColor,
-                                fontWeight: FontWeight.w700)),
+                          color: _sellSoft,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Saldo insuficiente',
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: _sellColor,
+                              fontWeight: FontWeight.w700),
+                        ),
                       ),
                     ],
                   ],
@@ -1740,15 +1676,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   highlight: estimatedTotal != null && estimatedTotal > 0,
                   alertColor: isOverBudget,
                 ),
-                // Projeção de saldo e tokens após a execução da ordem
-                if (estimatedTotal != null &&
-                    estimatedTotal > 0 &&
-                    state.inputQty > 0) ...[
+                if (estimatedTotal != null && estimatedTotal > 0 && state.inputQty > 0) ...[
                   const Divider(height: 14, color: Color(0xFFEEEEEE)),
                   _buildSummaryDeltaLine(
                     'Saldo após',
-                    state.formatPrice(brlDisponivel +
-                        (isBuy ? -estimatedTotal : estimatedTotal)),
+                    state.formatPrice(brlDisponivel + (isBuy ? -estimatedTotal : estimatedTotal)),
                     '${isBuy ? '−' : '+'} ${state.formatPrice(estimatedTotal)}',
                     deltaPositive: !isBuy,
                   ),
@@ -1759,24 +1691,19 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                     deltaPositive: isBuy,
                   ),
                 ],
-                // Aviso de estimativa para ordens Market
-                if (isMarket &&
-                    estimatedTotal != null &&
-                    estimatedTotal > 0)
+                if (isMarket && estimatedTotal != null && estimatedTotal > 0)
                   const Padding(
                     padding: EdgeInsets.only(top: 6),
                     child: Text(
                       '* Valor estimado com base no livro atual. O preço final pode variar.',
-                      style:
-                          TextStyle(fontSize: 9, color: _muted, height: 1.4),
+                      style: TextStyle(fontSize: 9, color: _muted, height: 1.4),
                     ),
                   ),
               ],
             ),
           ),
           const SizedBox(height: 14),
-
-          // Botão de envio — desabilitado se saldo insuficiente, lock-up ativo ou startup inválida
+          // Submit button
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -1820,16 +1747,16 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Hint de saldo disponível abaixo do campo de quantidade —
-  /// exibe reais para compra e tokens para venda
   Widget _buildBalanceHint(OrderbookState state, bool isBuy, String ticker) {
     if (isBuy) {
       return Row(
         children: [
           const Icon(Icons.info_outline, size: 12, color: _muted),
           const SizedBox(width: 5),
-          Text('Disponível: ${state.formatPrice(state.wallet.brlDisponivel)}',
-              style: const TextStyle(fontSize: 11, color: _muted)),
+          Text(
+            'Disponível: ${state.formatPrice(state.wallet.brlDisponivel)}',
+            style: const TextStyle(fontSize: 11, color: _muted),
+          ),
         ],
       );
     }
@@ -1837,17 +1764,19 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       children: [
         const Icon(Icons.info_outline, size: 12, color: _muted),
         const SizedBox(width: 5),
-        Text('Disponível: ${state.formatQty(state.wallet.tokens)} $ticker livres',
-            style: const TextStyle(fontSize: 11, color: _muted)),
+        Text(
+          'Disponível: ${state.formatQty(state.wallet.tokens)} $ticker livres',
+          style: const TextStyle(fontSize: 11, color: _muted),
+        ),
       ],
     );
   }
 
-  /// Barra visual de uso do saldo com indicador de overflow quando excede 100%
   Widget _buildBalanceBar(
       double fraction, bool isOver, bool isBuy, OrderbookState state) {
-    final barColor  = isOver ? _sellColor : (isBuy ? _buyColor : _sellColor);
-    final pctText   = '${(fraction * 100).toStringAsFixed(0)}% do ${isBuy ? 'saldo' : 'portfólio'}';
+    final barColor = isOver ? _sellColor : (isBuy ? _buyColor : _sellColor);
+    final pctText =
+        '${(fraction * 100).toStringAsFixed(0)}% do ${isBuy ? 'saldo' : 'portfólio'}';
     final overflowPct = ((fraction - 1.0) * 100).toStringAsFixed(0);
 
     return Column(
@@ -1855,15 +1784,20 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       children: [
         Row(
           children: [
-            Text('Uso do ${isBuy ? 'saldo' : 'portfólio'}',
-                style: const TextStyle(
-                    fontSize: 10, color: _muted, fontWeight: FontWeight.w600)),
+            Text(
+              'Uso do ${isBuy ? 'saldo' : 'portfólio'}',
+              style: const TextStyle(
+                  fontSize: 10, color: _muted, fontWeight: FontWeight.w600),
+            ),
             const Spacer(),
-            Text(pctText,
-                style: TextStyle(
-                    fontSize: 10,
-                    color: isOver ? _sellColor : _muted,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              pctText,
+              style: TextStyle(
+                fontSize: 10,
+                color: isOver ? _sellColor : _muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 5),
@@ -1879,17 +1813,20 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
           ),
         ),
-        // Linha de overflow exibida apenas quando o valor ultrapassa o disponível
         if (isOver) ...[
           const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(Icons.arrow_upward_rounded, size: 10, color: _sellColor),
+              const Icon(Icons.arrow_upward_rounded,
+                  size: 10, color: _sellColor),
               const SizedBox(width: 3),
               Text(
                 '+$overflowPct% além do ${isBuy ? 'saldo disponível' : 'portfólio disponível'}',
                 style: const TextStyle(
-                    fontSize: 10, color: _sellColor, fontWeight: FontWeight.w600),
+                  fontSize: 10,
+                  color: _sellColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -1898,96 +1835,299 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Botão de preenchimento rápido por percentual fixo (25%, 50%, 75%, 100%)
-  Widget _buildQuickFillButton(
-      String label, int pct, OrderbookState state, bool isBuy) {
-    return GestureDetector(
-      onTap: () => _applyQuickFill(pct.toDouble(), state, isBuy),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: _card,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _border),
-        ),
-        child: Text(label,
-            style: const TextStyle(
-                fontSize: 11, color: _ink, fontWeight: FontWeight.w600)),
+  // ── QUANTITY STEPPER ───────────────────────────────────────────────────────
+
+  String _stepLabel(int v) => v >= 1000 ? '${v ~/ 1000}K' : '$v';
+
+  Widget _buildQtyStepper(
+    OrderbookState state,
+    bool isBuy,
+    Color actionColor,
+    Color actionSoft,
+  ) {
+    final step = _stepValues[_stepIndex];
+    final canDec = state.inputQty > 0;
+    const radius = 16.0;
+
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          _HoldRepeatButton(
+            enabled: canDec,
+            onStep: () => _decrementQuantity(step, state, isBuy),
+            splashColor: actionSoft,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(radius),
+              bottomLeft: Radius.circular(radius),
+            ),
+            child: SizedBox(
+              width: 62,
+              height: 58,
+              child: Icon(
+                Icons.remove_rounded,
+                size: 26,
+                color: canDec ? actionColor : const Color(0xFFCFCFCF),
+              ),
+            ),
+          ),
+          Container(width: 1, height: 32, color: _border),
+          Expanded(
+            child: TextField(
+              controller: _qtyController,
+              onChanged: (v) => setState(() {
+                state.inputQty = int.tryParse(v) ?? 0;
+              }),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: _ink,
+                height: 1.0,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: '0',
+                hintStyle: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFCFCFCF),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 6),
+              ),
+            ),
+          ),
+          Container(width: 1, height: 32, color: _border),
+          _HoldRepeatButton(
+            enabled: true,
+            onStep: () => _incrementQuantity(step, state, isBuy),
+            splashColor: actionSoft,
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(radius),
+              bottomRight: Radius.circular(radius),
+            ),
+            child: SizedBox(
+              width: 62,
+              height: 58,
+              child: Icon(Icons.add_rounded, size: 26, color: actionColor),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  /// Calcula e aplica a quantidade de tokens correspondente ao percentual informado.
-  /// Usa o modo selecionado (saldo ou tokens) para Market orders
+  Widget _buildStepSelector(Color actionColor) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(right: 10, top: 4),
+          child: Text(
+            'Passo',
+            style: TextStyle(
+                fontSize: 11, color: _muted, fontWeight: FontWeight.w700),
+          ),
+        ),
+        Expanded(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (int i = 0; i < _stepValues.length; i++)
+                _buildStepChip(i, actionColor),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepChip(int i, Color actionColor) {
+    final selected = _stepIndex == i;
+    return GestureDetector(
+      onTap: () => setState(() => _stepIndex = i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? actionColor : _card,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: selected ? actionColor : _border),
+        ),
+        child: Text(
+          _stepLabel(_stepValues[i]),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.white : _ink,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── QUICK FILL ─────────────────────────────────────────────────────────────
+
+  Widget _buildQuickFillSection(
+    OrderbookState state,
+    bool isBuy,
+    bool isMarket,
+    Color actionColor,
+    Color actionSoft,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Preenchimento rápido',
+              style: TextStyle(
+                  fontSize: 12, color: _muted, fontWeight: FontWeight.w700),
+            ),
+            const Spacer(),
+            _buildPercentChip(actionColor, actionSoft, state, isBuy),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildPctRow(const [12.5, 25.0, 37.5, 50.0], state, isBuy),
+        const SizedBox(height: 6),
+        _buildPctRow(const [62.5, 75.0, 87.5, 100.0], state, isBuy),
+        if (isMarket) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(right: 10),
+                child: Text(
+                  'Base',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: _muted,
+                      fontWeight: FontWeight.w700),
+                ),
+              ),
+              _buildQuickModeButton(
+                'Saldo',
+                selected: _marketQuickMode == 'balance',
+                color: actionColor,
+                onTap: () {
+                  setState(() => _marketQuickMode = 'balance');
+                  _applyQuickFill(_quickSliderPct, state, isBuy);
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildQuickModeButton(
+                'Tokens',
+                selected: _marketQuickMode == 'tokens',
+                color: actionColor,
+                onTap: () {
+                  setState(() => _marketQuickMode = 'tokens');
+                  _applyQuickFill(_quickSliderPct, state, isBuy);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _marketQuickMode == 'balance'
+                ? (isBuy
+                    ? 'Percentual sobre seu saldo em reais.'
+                    : 'Percentual do saldo em reais convertido pela liquidez do book comprador.')
+                : (isBuy
+                    ? 'Percentual dos tokens disponíveis no book de venda.'
+                    : 'Percentual dos seus tokens livres para venda.'),
+            style: const TextStyle(fontSize: 10, color: _muted),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPctRow(List<double> pcts, OrderbookState state, bool isBuy) {
+    return Row(
+      children: [
+        for (int i = 0; i < pcts.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(child: _buildQuickPctButton(pcts[i], state, isBuy)),
+        ],
+      ],
+    );
+  }
+
+  String _pctLabel(double p) => p == p.roundToDouble()
+      ? '${p.toInt()}%'
+      : '${p.toStringAsFixed(1).replaceAll('.', ',')}%';
+
+  Widget _buildQuickPctButton(double pct, OrderbookState state, bool isBuy) {
+    return GestureDetector(
+      onTap: () => _applyQuickFill(pct, state, isBuy),
+      child: Container(
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: _border),
+        ),
+        child: Text(
+          _pctLabel(pct),
+          style: const TextStyle(
+              fontSize: 12, color: _ink, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+
   void _applyQuickFill(double pct, OrderbookState state, bool isBuy) {
     int qty;
     final brlDisponivel = state.wallet.brlDisponivel;
     if (state.orderType == 'market') {
       if (_marketQuickMode == 'balance') {
-        // Converte o percentual do saldo em tokens pela liquidez do book
         final amount = brlDisponivel * pct / 100;
         qty = state.estimateMarketQtyForValue(state.currentTab, amount);
       } else {
-        // Percentual direto sobre os tokens disponíveis
         final tokenBase = isBuy
             ? state.availableMarketQty(state.currentTab)
             : state.wallet.tokens;
         qty = (tokenBase * pct / 100).floor();
       }
     } else if (isBuy) {
-      // Limit buy: percentual do saldo dividido pelo preço da ordem
       final price = state.inputPrice > 0
           ? state.inputPrice
           : state.currentStartup.precoEmissao;
       qty = price > 0 ? ((brlDisponivel * pct / 100) / price).floor() : 0;
     } else {
-      // Limit sell: percentual dos tokens em carteira
       qty = (state.wallet.tokens * pct / 100).floor();
     }
 
     _qtyController.text = qty > 0 ? qty.toString() : '';
     setState(() {
-      _quickSliderPct  = pct;
-      state.inputQty   = qty;
+      _quickSliderPct = pct;
+      state.inputQty = qty;
     });
   }
 
-  /// Preenche a quantidade máxima possível com base no saldo (compra) ou tokens (venda)
-  void _applyMaxFill(OrderbookState state, bool isBuy) {
-    int qty;
-    final brlDisponivel = state.wallet.brlDisponivel;
-
-    if (isBuy) {
-      if (state.orderType == 'market') {
-        qty = state.estimateMarketQtyForValue(state.currentTab, brlDisponivel);
-      } else {
-        final price = state.inputPrice > 0
-            ? state.inputPrice
-            : state.currentStartup.precoEmissao;
-        qty = price > 0 ? (brlDisponivel / price).floor() : 0;
-      }
-    } else {
-      qty = state.wallet.tokens;
-    }
-
-    _qtyController.text = qty > 0 ? qty.toString() : '';
-    setState(() {
-      _quickSliderPct = 100.0;
-      state.inputQty  = qty;
-    });
-  }
-
-  /// Incrementa a quantidade pelo valor informado, respeitando o limite máximo do saldo
   void _incrementQuantity(int increment, OrderbookState state, bool isBuy) {
-    int currentQty  = int.tryParse(_qtyController.text) ?? 0;
+    int currentQty = int.tryParse(_qtyController.text) ?? 0;
     final brlDisponivel = state.wallet.brlDisponivel;
     int newQty = currentQty + increment;
 
-    // Garante que não ultrapasse o máximo possível
+    // Validar limite máximo
     if (isBuy) {
       int maxQty;
       if (state.orderType == 'market') {
-        maxQty = state.estimateMarketQtyForValue(state.currentTab, brlDisponivel);
+        maxQty =
+            state.estimateMarketQtyForValue(state.currentTab, brlDisponivel);
       } else {
         final price = state.inputPrice > 0
             ? state.inputPrice
@@ -2000,22 +2140,27 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     }
 
     _qtyController.text = newQty > 0 ? newQty.toString() : '';
-    setState(() => state.inputQty = newQty);
+    setState(() {
+      state.inputQty = newQty;
+    });
   }
 
-  /// Decrementa a quantidade pelo valor informado, sem deixar ir abaixo de zero
   void _decrementQuantity(int decrement, OrderbookState state, bool isBuy) {
     int currentQty = int.tryParse(_qtyController.text) ?? 0;
     int newQty = (currentQty - decrement).clamp(0, double.infinity).toInt();
 
     _qtyController.text = newQty > 0 ? newQty.toString() : '';
-    setState(() => state.inputQty = newQty);
+    setState(() {
+      state.inputQty = newQty;
+    });
   }
 
-  /// Chip do slider de percentual — abre/fecha o slider ao tocar,
-  /// abre o teclado numérico customizado ao manter pressionado
   Widget _buildPercentChip(
-      Color color, Color soft, OrderbookState state, bool isBuy) {
+    Color color,
+    Color soft,
+    OrderbookState state,
+    bool isBuy,
+  ) {
     return GestureDetector(
       onTap: () => setState(() => _showQuickSlider = !_showQuickSlider),
       onLongPress: () => _showPercentInputDialog(state, isBuy, color),
@@ -2032,8 +2177,11 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.tune_rounded,
-                size: 12, color: _showQuickSlider ? color : _muted),
+            Icon(
+              Icons.tune_rounded,
+              size: 12,
+              color: _showQuickSlider ? color : _muted,
+            ),
             const SizedBox(width: 4),
             Text(
               _quickSliderPct % 1 == 0
@@ -2051,7 +2199,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Botão de alternância entre os modos de cálculo rápido (Saldo / Tokens)
   Widget _buildQuickModeButton(
     String label, {
     required bool selected,
@@ -2066,31 +2213,31 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
         decoration: BoxDecoration(
           color: selected ? color.withOpacity(0.12) : _card,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-              color: selected ? color.withOpacity(0.35) : _border),
+          border:
+              Border.all(color: selected ? color.withOpacity(0.35) : _border),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 11,
-                color: selected ? color : _ink,
-                fontWeight: FontWeight.w700)),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: selected ? color : _ink,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
 
-  /// Rótulo de seção com estilo padrão do painel de ação
   Widget _buildSectionLabel(String text) {
     return Text(text,
         style: const TextStyle(
             fontSize: 12, color: _muted, fontWeight: FontWeight.w700));
   }
 
-  /// Linha do resumo com rótulo à esquerda e valor à direita.
-  /// [highlight] destaca em azul; [alertColor] destaca em vermelho
   Widget _buildSummaryLine(
     String label,
     String value, {
-    bool highlight  = false,
+    bool highlight = false,
     bool alertColor = false,
   }) {
     return Padding(
@@ -2115,7 +2262,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Linha do resumo com valor projetado e delta colorido (+ verde / − vermelho)
   Widget _buildSummaryDeltaLine(
     String label,
     String newValue,
@@ -2131,21 +2277,22 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               style: const TextStyle(
                   fontSize: 11, color: _muted, fontWeight: FontWeight.w600)),
           const Spacer(),
-          Text(newValue,
-              style: const TextStyle(
-                  fontSize: 11, color: _ink, fontWeight: FontWeight.w700)),
+          Text(
+            newValue,
+            style: const TextStyle(
+                fontSize: 11, color: _ink, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(width: 8),
-          Text(deltaText,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: deltaColor,
-                  fontWeight: FontWeight.w800)),
+          Text(
+            deltaText,
+            style: TextStyle(
+                fontSize: 11, color: deltaColor, fontWeight: FontWeight.w800),
+          ),
         ],
       ),
     );
   }
 
-  /// Aba de seleção compra/venda com animação de cor e borda
   Widget _buildTabButton(
     String label,
     bool isActive,
@@ -2164,16 +2311,18 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           border: Border.all(color: isActive ? foreground : _border),
         ),
         alignment: Alignment.center,
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: isActive ? foreground : _muted)),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: isActive ? foreground : _muted,
+          ),
+        ),
       ),
     );
   }
 
-  /// Botão de tipo de ordem (Market / Limit) com ícone de ajuda inline
   Widget _buildOrderTypeButton(
     String label,
     String caption,
@@ -2198,14 +2347,19 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
           children: [
             Icon(icon, size: 14, color: isActive ? _ink : _muted),
             const SizedBox(width: 5),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: isActive ? _ink : _muted)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: isActive ? _ink : _muted,
+              ),
+            ),
             const SizedBox(width: 3),
-            Text('· $caption',
-                style: const TextStyle(fontSize: 10, color: _muted)),
+            Text(
+              '· $caption',
+              style: const TextStyle(fontSize: 10, color: _muted),
+            ),
             const SizedBox(width: 4),
             GestureDetector(
               onTap: () => _showInfoDialog(context, infoLabel, infoText),
@@ -2220,8 +2374,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── TRADE HISTORY ──────────────────────────────────────────────────────────
 
-  /// Tabela com os últimos trades executados na startup selecionada.
-  /// O trade mais recente fica destacado em azul claro
   Widget _buildTradeHistory(OrderbookState state) {
     final trades = state.trades;
 
@@ -2237,20 +2389,20 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
             child: Row(
               children: [
-                const Text('Histórico de trades',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: _ink)),
+                const Text(
+                  'Histórico de trades',
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w800, color: _ink),
+                ),
                 const Spacer(),
-                // Badge com contagem de trades
                 if (trades.isNotEmpty)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                        color: _card,
-                        borderRadius: BorderRadius.circular(8)),
+                      color: _card,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: Text(
                       '${trades.length} trade${trades.length > 1 ? 's' : ''}',
                       style: const TextStyle(
@@ -2263,7 +2415,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
             ),
           ),
           if (trades.isNotEmpty) ...[
-            // Cabeçalho das colunas
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               color: _card,
@@ -2298,57 +2449,62 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                 ],
               ),
             ),
-            // Linhas de trade — o índice 0 (mais recente) recebe fundo azul claro
             ...trades.asMap().entries.map((entry) {
               final index = entry.key;
               final trade = entry.value;
-              final isBuy    = trade.side == 'compra';
+              final isBuy = trade.side == 'compra';
               final sideColor = isBuy ? _buyColor : _sellColor;
 
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: index == 0
-                      ? const Color(0xFFEDF3FD)
-                      : Colors.transparent,
-                  border: const Border(
-                      top: BorderSide(color: Color(0xFFF0F0EA))),
+                  color:
+                      index == 0 ? const Color(0xFFEDF3FD) : Colors.transparent,
+                  border:
+                      const Border(top: BorderSide(color: Color(0xFFF0F0EA))),
                 ),
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(trade.time,
-                          style:
-                              const TextStyle(fontSize: 11, color: _muted)),
+                      child: Text(
+                        trade.time,
+                        style: const TextStyle(fontSize: 11, color: _muted),
+                      ),
                     ),
                     Expanded(
                       child: Row(
                         children: [
-                          // Indicador colorido de compra/venda
                           Container(
                             width: 6,
                             height: 6,
                             margin: const EdgeInsets.only(right: 5),
                             decoration: BoxDecoration(
-                                color: sideColor, shape: BoxShape.circle),
+                              color: sideColor,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                          Text(isBuy ? 'Compra' : 'Venda',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: sideColor)),
+                          Text(
+                            isBuy ? 'Compra' : 'Venda',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: sideColor,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: Text(state.formatPrice(trade.price),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: _ink,
-                              fontWeight: FontWeight.w700)),
+                      child: Text(
+                        state.formatPrice(trade.price),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: _ink,
+                            fontWeight: FontWeight.w700),
+                      ),
                     ),
                     Expanded(
                       child: Text(
@@ -2362,23 +2518,22 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               );
             }),
           ] else
-            // Placeholder quando não há trades ainda
-            const Padding(
-              padding: EdgeInsets.all(28),
+            Padding(
+              padding: const EdgeInsets.all(28),
               child: Column(
-                children: [
+                children: const [
                   Icon(Icons.swap_horiz_rounded,
                       size: 32, color: Color(0xFFCCCCCC)),
                   SizedBox(height: 10),
-                  Text('Nenhuma trade executada ainda',
-                      style: TextStyle(
-                          fontSize: 13, color: Color(0xFFB9B9B9))),
+                  Text(
+                    'Nenhuma trade executada ainda',
+                    style: TextStyle(fontSize: 13, color: Color(0xFFB9B9B9)),
+                  ),
                   SizedBox(height: 4),
                   Text(
                     'Execute uma Market ou Limit order para começar.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 11, color: Color(0xFFCCCCCC)),
+                    style: TextStyle(fontSize: 11, color: Color(0xFFCCCCCC)),
                   ),
                 ],
               ),
@@ -2390,11 +2545,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── ORDER ACTIONS ──────────────────────────────────────────────────────────
 
-  /// Valida os campos e envia a ordem via serviço.
-  /// Exibe feedback de sucesso ou abre o diálogo de erro conforme o resultado
   Future<void> _handleSubmitOrder(OrderbookState state, bool isBuy) async {
-    final qty       = state.inputQty;
-    final price     = state.orderType == 'limit' ? state.inputPrice : null;
+    final qty = state.inputQty;
+    final price = state.orderType == 'limit' ? state.inputPrice : null;
     final startupId = state.currentStartup.id;
 
     if (qty <= 0) {
@@ -2405,8 +2558,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     }
     if (state.orderType == 'limit' && (price == null || price <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Informe um preço válido para limite.')),
+        const SnackBar(content: Text('Informe um preço válido para limite.')),
       );
       return;
     }
@@ -2426,7 +2578,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
     if (result.success) {
       _clearInputs();
-      // Mensagem diferente conforme a ordem foi executada imediatamente ou entrou no book
       final msg = result.tradesExecuted > 0
           ? '${isBuy ? 'Compra' : 'Venda'} executada — ${result.tradesExecuted} trade(s)!'
           : (isBuy ? 'Ordem de compra enviada' : 'Ordem de venda enviada');
@@ -2443,11 +2594,12 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     }
   }
 
-  /// Cancela uma ordem aberta e exibe feedback ao usuário
   Future<void> _handleCancelOrder(String orderId) async {
     final startupId = _orderbookState.currentStartup.id;
     final result = await _service.cancelOrder(
-        startupId: startupId, orderId: orderId);
+      startupId: startupId,
+      orderId: orderId,
+    );
     if (!mounted) return;
     if (result.success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2463,25 +2615,23 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     }
   }
 
-  /// Diálogo de erro genérico com mensagem e botão de confirmação
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Atenção',
-            style: TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w800, color: _ink)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          'Atenção',
+          style:
+              TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _ink),
+        ),
         content: Text(message,
-            style: const TextStyle(
-                fontSize: 13, color: _muted, height: 1.55)),
+            style: const TextStyle(fontSize: 13, color: _muted, height: 1.55)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('OK',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700, color: _accent)),
+                style: TextStyle(fontWeight: FontWeight.w700, color: _accent)),
           ),
         ],
       ),
@@ -2490,13 +2640,12 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
 
-  /// Abre um teclado numérico customizado para inserir percentuais com precisão de 2 casas decimais.
-  /// Usa representação em ponto fixo internamente (ex: 12,61% → buffer 1261)
-  /// para evitar imprecisões de ponto flutuante durante a digitação
   void _showPercentInputDialog(
       OrderbookState state, bool isBuy, Color actionColor) {
+    // buffer stores percentage × 100 (fixed-point 2 decimals)
+    // e.g. 12,61% → 1261; right-to-left calculator entry
     int buffer = (_quickSliderPct * 100).round();
-    bool replaceOnNext = true; // substitui o valor ao digitar o primeiro número
+    bool replaceOnNext = true;
 
     showDialog(
       context: context,
@@ -2504,10 +2653,10 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
-            final whole      = buffer ~/ 100;
-            final frac       = (buffer % 100).toString().padLeft(2, '0');
+            final whole = buffer ~/ 100;
+            final frac = (buffer % 100).toString().padLeft(2, '0');
             final displayStr = '$whole,$frac';
-            final overLimit  = buffer > 10000; // > 100,00%
+            final overLimit = buffer > 10000; // > 100,00%
             final displayColor = overLimit ? _sellColor : _ink;
 
             void press(String key) {
@@ -2516,7 +2665,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                   buffer = 0;
                   replaceOnNext = true;
                 } else if (key == '<') {
-                  buffer = buffer ~/ 10; // remove o último dígito
+                  buffer = buffer ~/ 10;
                 } else {
                   final digit = int.parse(key);
                   if (replaceOnNext) {
@@ -2529,9 +2678,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               });
             }
 
-            // Aplica o percentual ao slider e fecha o diálogo
             void apply() {
-              final raw     = buffer / 100.0;
+              final raw = buffer / 100.0;
               final clamped = raw.clamp(0.01, 100.0);
               setState(() => _quickSliderPct = clamped);
               _applyQuickFill(clamped, state, isBuy);
@@ -2542,8 +2690,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(22)),
-              insetPadding: const EdgeInsets.symmetric(
-                  horizontal: 24, vertical: 24),
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
                 child: Column(
@@ -2554,11 +2702,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                       children: [
                         Icon(Icons.tune_rounded, size: 16, color: actionColor),
                         const SizedBox(width: 8),
-                        const Text('Definir porcentagem',
-                            style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: _ink)),
+                        const Text(
+                          'Definir porcentagem',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                          ),
+                        ),
                         const Spacer(),
                         GestureDetector(
                           onTap: () => Navigator.pop(ctx),
@@ -2568,11 +2719,12 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text('Valor entre 0,01 e 100,00.',
-                        style: TextStyle(
-                            fontSize: 11, color: _muted, height: 1.4)),
+                    const Text(
+                      'Valor entre 0,01 e 100,00.',
+                      style:
+                          TextStyle(fontSize: 11, color: _muted, height: 1.4),
+                    ),
                     const SizedBox(height: 14),
-                    // Display grande com o valor digitado
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
@@ -2581,9 +2733,8 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                         color: _card,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: overLimit
-                              ? _sellColor.withValues(alpha: 0.6)
-                              : _border,
+                          color:
+                              overLimit ? _sellColor.withValues(alpha: 0.6) : _border,
                         ),
                       ),
                       child: Row(
@@ -2591,22 +2742,27 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Text(displayStr,
-                              style: TextStyle(
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.w800,
-                                  color: displayColor,
-                                  letterSpacing: -1)),
+                          Text(
+                            displayStr,
+                            style: TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.w800,
+                              color: displayColor,
+                              letterSpacing: -1,
+                            ),
+                          ),
                           const SizedBox(width: 4),
-                          Text('%',
-                              style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: overLimit ? _sellColor : actionColor)),
+                          Text(
+                            '%',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: overLimit ? _sellColor : actionColor,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    // Aviso de limite ultrapassado
                     if (overLimit) ...[
                       const SizedBox(height: 6),
                       Row(
@@ -2614,16 +2770,18 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                           Icon(Icons.error_outline_rounded,
                               size: 12, color: _sellColor),
                           SizedBox(width: 4),
-                          Text('Máximo é 100% — será limitado',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: _sellColor,
-                                  fontWeight: FontWeight.w600)),
+                          Text(
+                            'Máximo é 100% — será limitado',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _sellColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ],
                     const SizedBox(height: 14),
-                    // Teclado numérico 3×4 (1–9, C, 0, ←)
                     _buildKeypadRow(const ['1', '2', '3'], press, actionColor),
                     const SizedBox(height: 8),
                     _buildKeypadRow(const ['4', '5', '6'], press, actionColor),
@@ -2636,8 +2794,7 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed:
-                            (buffer == 0 || overLimit) ? null : apply,
+                        onPressed: (buffer == 0 || overLimit) ? null : apply,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: actionColor,
                           foregroundColor: Colors.white,
@@ -2645,12 +2802,14 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
                               actionColor.withOpacity(0.35),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
-                        child: const Text('Aplicar',
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800)),
+                        child: const Text(
+                          'Aplicar',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
                       ),
                     ),
                   ],
@@ -2663,7 +2822,6 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Constrói uma linha do teclado numérico com 3 teclas
   Widget _buildKeypadRow(
     List<String> keys,
     void Function(String key) onPress,
@@ -2673,33 +2831,34 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
       children: [
         for (int i = 0; i < keys.length; i++) ...[
           if (i > 0) const SizedBox(width: 8),
-          Expanded(
-              child: _buildKeypadKey(keys[i], onPress, actionColor)),
+          Expanded(child: _buildKeypadKey(keys[i], onPress, actionColor)),
         ],
       ],
     );
   }
 
-  /// Tecla individual do teclado numérico.
-  /// 'C' = limpar (vermelho), '<' = apagar (ícone), dígitos = número grande
   Widget _buildKeypadKey(
     String label,
     void Function(String key) onPress,
     Color actionColor,
   ) {
     final isClear = label == 'C';
-    final isBack  = label == '<';
+    final isBack = label == '<';
+
     final Color fg = isClear ? _sellColor : (isBack ? _muted : _ink);
 
     Widget content;
     if (isBack) {
       content = const Icon(Icons.backspace_outlined, size: 18, color: _muted);
     } else {
-      content = Text(label,
-          style: TextStyle(
-              fontSize: isClear ? 16 : 22,
-              fontWeight: FontWeight.w800,
-              color: fg));
+      content = Text(
+        label,
+        style: TextStyle(
+          fontSize: isClear ? 16 : 22,
+          fontWeight: FontWeight.w800,
+          color: fg,
+        ),
+      );
     }
 
     return Material(
@@ -2723,38 +2882,32 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
     );
   }
 
-  /// Diálogo informativo reutilizável para explicar conceitos do balcão
   void _showInfoDialog(BuildContext context, String title, String body) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Text(title,
             style: const TextStyle(
                 fontSize: 15, fontWeight: FontWeight.w800, color: _ink)),
         content: Text(body,
-            style: const TextStyle(
-                fontSize: 13, color: _muted, height: 1.55)),
+            style: const TextStyle(fontSize: 13, color: _muted, height: 1.55)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Entendi',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700, color: _accent)),
+                style: TextStyle(fontWeight: FontWeight.w700, color: _accent)),
           ),
         ],
       ),
     );
   }
 
-  /// Decoração padrão dos campos de texto do painel de ação
   InputDecoration _inputDec({String? hint}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: const TextStyle(color: Color(0xFF9A9A9A), fontSize: 13),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: _border),
@@ -2775,11 +2928,9 @@ class _BalcaoScreenState extends State<BalcaoScreen> {
 
 // ── TICKER BADGE ────────────────────────────────────────────────────────────
 
-/// Thumb do slider que cresce proporcionalmente ao valor arrastado.
-/// Implementa sombra via discos sobrepostos (sem [MaskFilter], compatível com web)
 class _GrowingThumbShape extends SliderComponentShape {
-  final double minRadius; // raio quando o valor é 0
-  final double maxRadius; // raio quando o valor é 1
+  final double minRadius;
+  final double maxRadius;
 
   const _GrowingThumbShape({this.minRadius = 6, this.maxRadius = 14});
 
@@ -2803,21 +2954,31 @@ class _GrowingThumbShape extends SliderComponentShape {
     required double textScaleFactor,
     required Size sizeWithOverflow,
   }) {
-    final canvas     = context.canvas;
-    final safeValue  = value.isFinite ? value.clamp(0.0, 1.0) : 0.0;
-    final radius     = minRadius + (maxRadius - minRadius) * safeValue;
+    final canvas = context.canvas;
+    final safeValue = value.isFinite ? value.clamp(0.0, 1.0) : 0.0;
+    final radius = minRadius + (maxRadius - minRadius) * safeValue;
     final thumbColor = sliderTheme.thumbColor ?? const Color(0xFF173B7A);
 
-    // Camadas de sombra translúcidas para simular profundidade sem MaskFilter
-    canvas.drawCircle(center.translate(0, 2.0), radius + 1.5,
-        Paint()..color = Colors.black.withOpacity(0.08));
-    canvas.drawCircle(center.translate(0, 1.2), radius + 0.5,
-        Paint()..color = Colors.black.withOpacity(0.12));
+    // Soft drop-shadow using two translucent layered discs (web-safe; no MaskFilter)
+    canvas.drawCircle(
+      center.translate(0, 2.0),
+      radius + 1.5,
+      Paint()..color = Colors.black.withOpacity(0.08),
+    );
+    canvas.drawCircle(
+      center.translate(0, 1.2),
+      radius + 0.5,
+      Paint()..color = Colors.black.withOpacity(0.12),
+    );
 
-    // Círculo principal do thumb
-    canvas.drawCircle(center, radius, Paint()..color = thumbColor);
+    // Main thumb
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()..color = thumbColor,
+    );
 
-    // Reflexo branco no canto superior esquerdo para efeito de brilho
+    // Inner highlight
     canvas.drawCircle(
       center.translate(-radius * 0.28, -radius * 0.28),
       radius * 0.32,
@@ -2826,11 +2987,108 @@ class _GrowingThumbShape extends SliderComponentShape {
   }
 }
 
-/// Badge com a sigla da startup, usado no seletor e nas listas.
-/// Exibe até 3 caracteres da sigla sobre fundo colorido translúcido
+/// Botão do stepper que dispara um passo no toque e repete (acelerando)
+/// enquanto mantido pressionado. Seguro dentro de listas roláveis: um arraste
+/// para rolar cancela o gesto sem aplicar passo.
+class _HoldRepeatButton extends StatefulWidget {
+  final VoidCallback onStep;
+  final bool enabled;
+  final Widget child;
+  final BorderRadius borderRadius;
+  final Color splashColor;
+
+  const _HoldRepeatButton({
+    required this.onStep,
+    required this.child,
+    required this.borderRadius,
+    required this.splashColor,
+    this.enabled = true,
+  });
+
+  @override
+  State<_HoldRepeatButton> createState() => _HoldRepeatButtonState();
+}
+
+class _HoldRepeatButtonState extends State<_HoldRepeatButton> {
+  Timer? _holdTimer; // atraso inicial antes de começar a repetir
+  Timer? _repeatTimer; // repetição contínua
+  int _ticks = 0;
+  bool _pressed = false;
+
+  void _onTapDown() {
+    if (!widget.enabled) return;
+    setState(() => _pressed = true);
+    _ticks = 0;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(const Duration(milliseconds: 380), _beginRepeat);
+  }
+
+  void _beginRepeat() {
+    HapticFeedback.selectionClick();
+    _tickRepeat();
+  }
+
+  void _tickRepeat() {
+    if (!widget.enabled) {
+      _cancelTimers();
+      return;
+    }
+    widget.onStep();
+    _ticks++;
+    final interval = (130 - _ticks * 10).clamp(45, 130).toInt();
+    _repeatTimer = Timer(Duration(milliseconds: interval), _tickRepeat);
+  }
+
+  void _cancelTimers() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  void _release() {
+    _cancelTimers();
+    if (mounted && _pressed) setState(() => _pressed = false);
+  }
+
+  void _onTap() {
+    if (!widget.enabled) return;
+    // Quando já entrou no modo repetição, os passos foram aplicados pelo
+    // hold — evita contar um passo extra no soltar.
+    if (_ticks > 0) return;
+    widget.onStep();
+    HapticFeedback.selectionClick();
+  }
+
+  @override
+  void dispose() {
+    _cancelTimers();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: widget.enabled ? (_) => _onTapDown() : null,
+      onTapUp: (_) => _release(),
+      onTapCancel: _release,
+      onTap: _onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: _pressed ? widget.splashColor : Colors.transparent,
+          borderRadius: widget.borderRadius,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _TickerBadge extends StatelessWidget {
   final String ticker;
-  final Color  color;
+  final Color color;
   final double size;
 
   const _TickerBadge(
@@ -2838,7 +3096,6 @@ class _TickerBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Limita a 3 caracteres para não ultrapassar o espaço do badge
     final label = ticker.substring(0, ticker.length.clamp(0, 3));
     return Container(
       width: size,

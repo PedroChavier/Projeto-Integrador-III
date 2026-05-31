@@ -468,7 +468,10 @@ class _StartupDetalheScreenState extends State<StartupDetalheScreen>
                               onPressed: () => Navigator.push(
                                 context,
                                 PageRouteBuilder(
-                                  pageBuilder: (_, __, ___) => const BalcaoScreen(),
+                                  pageBuilder: (_, __, ___) => BalcaoScreen(
+                                    startupId: widget.startupUid,
+                                    abaInicial: _tokensNaCarteira > 0 ? 1 : 0,
+                                  ),
                                   transitionDuration: Duration.zero,      // Sem animação
                                   reverseTransitionDuration: Duration.zero,
                                 ),
