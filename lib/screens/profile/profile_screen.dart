@@ -7,7 +7,6 @@ import '../../models/user_profile.dart';
 import '../home/home_screen.dart';
 import '../initial/splash_screen.dart';
 import '../authentication/password_recovery_screen.dart';
-import '../authentication/sms_email_verification_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -50,26 +49,22 @@ class _PerfilScreenState extends State<PerfilScreen> {
     if (_salvandoMfa) return; // Ignora se já está salvando
 
     if (value) {
-      await _ativarMfaComVerificacao();
+      await _ativarMfa();
     } else {
       await _desativarMfa();
     }
   }
 
-  // Exibe confirmação e redireciona para verificação por SMS/e-mail antes de ativar
-  Future<void> _ativarMfaComVerificacao() async {
-    final perfil = _perfil;
-    if (perfil == null) return;
-
-    final telMascarado = _mascararTelefoneDialog(perfil.telefone);
-
-    // Diálogo de confirmação antes de iniciar a verificação
+  // Exibe confirmação e ativa o 2FA, gravando a flag no Firestore.
+  // OBS: o mecanismo de verificação por código (SMS/e-mail) foi removido;
+  // este fluxo apenas alterna a flag mfaHabilitado.
+  Future<void> _ativarMfa() async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Ativar autenticacao 2FA'),
-        content: Text(
-          'Para ativar, voce precisara confirmar o acesso ao numero $telMascarado ou ao seu e-mail.\n\nDeseja continuar?',
+        content: const Text(
+          'Deseja ativar a autenticacao em dois fatores na sua conta?',
         ),
         actions: [
           TextButton(
@@ -78,7 +73,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Continuar'),
+            child: const Text('Ativar'),
           ),
         ],
       ),
@@ -86,26 +81,36 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     if (confirmar != true || !mounted) return;
 
-    // Navega para a tela de verificação; ao concluir, salva o 2FA como ativo
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SmsEmailVerificationScreen(
-          profile: perfil,
-          onMfaAtivado: () async {
-            await _authService.updateCurrentUserMfaStatus(true);
-            await _carregarPerfil();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Autenticacao em dois fatores ativada.'),
-                  backgroundColor: Colors.green[400],
-                ),
-              );
-            }
-          },
+    final estadoAnterior = _2faAtivado; // Guarda estado para reverter se falhar
+    setState(() {
+      _salvandoMfa = true;
+      _2faAtivado = true;
+    });
+
+    try {
+      await _authService.updateCurrentUserMfaStatus(true);
+      await _carregarPerfil();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Autenticacao em dois fatores ativada.'),
+          backgroundColor: Colors.green[400],
         ),
-      ),
-    );
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[PerfilScreen] Falha ao ativar 2FA: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() => _2faAtivado = estadoAnterior); // Reverte o switch em caso de erro
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mensagemErroMfa(error)),
+          backgroundColor: Colors.red[400],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _salvandoMfa = false); // Libera o switch
+    }
   }
 
   // Exibe confirmação e desativa o 2FA, revertendo em caso de erro
@@ -155,7 +160,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
       setState(() => _2faAtivado = estadoAnterior); // Reverte o switch em caso de erro
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Nao foi possivel atualizar a autenticacao 2FA.'),
+          content: Text(_mensagemErroMfa(error)),
           backgroundColor: Colors.red[400],
         ),
       );
@@ -164,13 +169,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
     }
   }
 
-  // Mascara o telefone para exibir no diálogo: "(11) *****-89"
-  String _mascararTelefoneDialog(String telefone) {
-    final d = telefone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (d.length < 10) return telefone.isNotEmpty ? telefone : 'cadastrado';
-    final ddd = d.substring(0, 2);
-    final fim = d.substring(d.length - 2);
-    return '($ddd) *****-$fim';
+  // Extrai uma mensagem legível do erro de 2FA para exibir no SnackBar.
+  String _mensagemErroMfa(Object error) {
+    var msg = error.toString();
+    const prefixo = 'Exception: ';
+    if (msg.startsWith(prefixo)) {
+      msg = msg.substring(prefixo.length);
+    }
+    return msg.trim().isEmpty
+        ? 'Nao foi possivel atualizar a autenticacao 2FA.'
+        : msg;
   }
 
   // Gera as iniciais do nome: "Ana Souza" → "AS"

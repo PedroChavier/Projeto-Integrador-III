@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
@@ -51,60 +50,29 @@ class _SmsEmailVerificationScreenState
         ? _mascararEmail(widget.profile.email)
         : _mascararTelefone(widget.profile.telefone);
 
-    setState(() => _isLoading = true);
+    // TODO(2FA): reimplementar o envio do codigo de verificacao.
+    // O mecanismo anterior (Cloud Function 'solicitarCodigoMfa') foi removido;
+    // esta tela permanece apenas como shell de UI para a feature ser refeita.
+    _mostrarMensagem('Envio de codigo 2FA ainda nao implementado.');
 
-    try {
-      if (!mounted) return;
-
-      final functions = FirebaseFunctions.instanceFor(
-        region: 'southamerica-east1',
-      );
-
-      final callable = functions.httpsCallable('solicitarCodigoMfa');
-
-      await callable.call(<String, dynamic>{
-        'canal': canal,
-      });
-
-      if (!mounted) return;
-
-      _mostrarMensagem('Codigo enviado por $canal para $destino.');
-
-      final resultado = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (_) => Verificacao2FAScreen(
-            canal: canal,
-            destinoMascarado: destino,
-            onVerificado: widget.onMfaAtivado != null ? () {} : null,
-          ),
+    final resultado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => Verificacao2FAScreen(
+          canal: canal,
+          destinoMascarado: destino,
+          onVerificado: widget.onMfaAtivado != null ? () {} : null,
         ),
-      );
+      ),
+    );
 
-      if (resultado == true && widget.onMfaAtivado != null && mounted) {
-        try {
-          await widget.onMfaAtivado!();
-          if (mounted) Navigator.of(context).pop();
-        } catch (_) {
-          if (mounted) {
-            _mostrarMensagem('Erro ao salvar configuracao do 2FA.', isError: true);
-          }
+    if (resultado == true && widget.onMfaAtivado != null && mounted) {
+      try {
+        await widget.onMfaAtivado!();
+        if (mounted) Navigator.of(context).pop();
+      } catch (_) {
+        if (mounted) {
+          _mostrarMensagem('Erro ao salvar configuracao do 2FA.', isError: true);
         }
-      }
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-      _mostrarMensagem(
-        'Falha ao enviar o codigo: ${e.code} - ${e.message ?? 'sem mensagem'}.',
-        isError: true,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _mostrarMensagem(
-        'Erro ao enviar o codigo: ${e.toString()}',
-        isError: true,
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
       }
     }
   }

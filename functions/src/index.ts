@@ -3,15 +3,6 @@ import * as net from "node:net";
 import * as tls from "node:tls";
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import {
-  enviarCodigoMfaPorEmail,
-  enviarCodigoMfaPorSms,
-  gerarCodigoMfaSeisDigitos,
-  salvarCodigoMfaNoFirebase,
-  verificarCodigoMfa,
-  type MfaChannel,
-} from "./mfa_code";
-export * from "./mfa_code";
 export * from "./balcao";
 import { enforceRateLimit } from "./rate_limit";
 
@@ -49,17 +40,6 @@ type RedefinirSenhaPayload = {
   email?: unknown;
   code?: unknown;
   newPassword?: unknown;
-};
-
-// Payload esperado para solicitar o envio de um codigo MFA.
-type SolicitarCodigoMfaPayload = {
-  canal?: unknown;
-};
-
-// Payload esperado para verificar um codigo MFA.
-type VerificarCodigoMfaPayload = {
-  codigo?: unknown;
-  canal?: unknown;
 };
 
 type CreditarSaldoPayload = {
@@ -274,129 +254,6 @@ export const redefinirSenhaComCodigo = functions
     return {
       success: true,
       message: "Senha redefinida com sucesso.",
-    };
-  }
-);
-
-// Funcao Callable: gera, persiste e envia um codigo MFA para o canal escolhido pelo usuario autenticado.
-export const solicitarCodigoMfa = functions
-  .region('southamerica-east1')
-  .https.onCall(
-  async (data: SolicitarCodigoMfaPayload, context) => {
-    const uid = context.auth?.uid;
-
-    if (!uid) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Usuario nao autenticado."
-      );
-    }
-
-    await enforceRateLimit({
-      key: uid,
-      action: "solicitarCodigoMfa",
-      maxPerWindow: 5,
-      windowSeconds: 600,
-    });
-
-    const canal = sanitizeMfaChannel(data.canal);
-    const usuarioSnapshot = await usuariosCollection.doc(uid).get();
-    const usuarioData = usuarioSnapshot.data();
-
-    if (!usuarioSnapshot.exists || !usuarioData) {
-      throw new functions.https.HttpsError(
-        "not-found",
-        "Perfil do usuario nao encontrado."
-      );
-    }
-
-    const fullName =
-      typeof usuarioData.fullName === "string" ? usuarioData.fullName.trim() : "";
-    const email =
-      typeof usuarioData.email === "string" ? usuarioData.email.trim() : "";
-    const telefone =
-      typeof usuarioData.telefone === "string" ? usuarioData.telefone.trim() : "";
-    const mfaHabilitado = usuarioData.mfaHabilitado === true;
-
-    if (!mfaHabilitado) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "A autenticacao multifator nao esta habilitada para este usuario."
-      );
-    }
-
-    if (canal === "email" && !email) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "O usuario nao possui e-mail cadastrado para MFA."
-      );
-    }
-
-    if (canal === "sms" && !telefone) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "O usuario nao possui telefone cadastrado para MFA."
-      );
-    }
-
-    const codigo = gerarCodigoMfaSeisDigitos();
-
-    await salvarCodigoMfaNoFirebase({
-      uid,
-      email,
-      telefone,
-      canal,
-      codigo,
-    });
-
-    if (canal === "email") {
-      await enviarCodigoMfaPorEmail({
-        to: email,
-        codigo,
-        nome: fullName,
-      });
-    } else {
-      await enviarCodigoMfaPorSms({
-        to: telefone,
-        codigo,
-        nome: fullName,
-      });
-    }
-
-    return {
-      success: true,
-      canal,
-      message: `Codigo MFA enviado por ${canal === "email" ? "e-mail" : "SMS"}.`,
-    };
-  }
-);
-
-// Funcao Callable: verifica o codigo MFA fornecido pelo usuario autenticado, validando contra o armazenado.
-export const verificarCodigoMfaCallable = functions
-  .region('southamerica-east1')
-  .https.onCall(
-  async (data: VerificarCodigoMfaPayload, context) => {
-    const uid = context.auth?.uid;
-
-    if (!uid) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Usuario nao autenticado."
-      );
-    }
-
-    const codigo = sanitizeRequiredString(data.codigo, "Codigo MFA");
-    const canal = sanitizeMfaChannel(data.canal);
-
-    await verificarCodigoMfa({
-      uid,
-      codigo,
-      canal,
-    });
-
-    return {
-      success: true,
-      message: "Codigo MFA verificado com sucesso.",
     };
   }
 );
@@ -860,18 +717,6 @@ function sanitizeBirthDate(value: unknown): admin.firestore.Timestamp {
   }
 
   return admin.firestore.Timestamp.fromDate(parsedDate);
-}
-
-// Valida o canal escolhido para envio do desafio MFA.
-function sanitizeMfaChannel(value: unknown): MfaChannel {
-  if (value !== "email" && value !== "sms") {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Informe um canal MFA valido: email ou sms."
-    );
-  }
-
-  return value;
 }
 
 function sanitizePositiveNumber(value: unknown, fieldName: string): number {

@@ -1,7 +1,6 @@
 import 'dart:async'; //usado para o timer (contagem regressiva)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; //usado para limitar a entrada so a numeros
-import 'package:cloud_functions/cloud_functions.dart';
 
 import '../home/home_screen.dart';
 
@@ -91,63 +90,28 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
   Future<void> _confirmar() async {
     if (!_codigoCompleto || _isLoading) return;
 
-    final codigo = _controllers.map((c) => c.text).join();
-    final canal = widget.canal;
-
     setState(() => _isLoading = true);
 
-    try {
-      final functions = FirebaseFunctions.instanceFor(
-        region: 'southamerica-east1',
+    // TODO(2FA): reimplementar a verificacao do codigo.
+    // O mecanismo anterior (Cloud Function 'verificarCodigoMfaCallable') foi
+    // removido; esta tela permanece apenas como shell de UI para ser refeita.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Verificacao 2FA ainda nao implementada.'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (widget.onVerificado != null) {
+      widget.onVerificado!();
+      Navigator.of(context).pop(true);
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
       );
-
-      final callable = functions.httpsCallable('verificarCodigoMfaCallable');
-
-      await callable.call(<String, dynamic>{
-        'codigo': codigo,
-        'canal': canal,
-      });
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Codigo validado com sucesso!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      if (widget.onVerificado != null) {
-        widget.onVerificado!();
-        Navigator.of(context).pop(true);
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
-      }
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message ?? 'Codigo invalido. Tente novamente.'),
-          backgroundColor: Colors.red[400],
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erro ao validar o codigo. Tente novamente.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 

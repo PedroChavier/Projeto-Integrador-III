@@ -1,7 +1,5 @@
 //Pedro Andre do Carmo Chavier -25018639
 
-import 'dart:async'; //Fornece o completer, usado para converter callbacks em futures
-
 //Banco e functions do firebase
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -64,92 +62,6 @@ class AuthService {
       email: email,
       password: senha,
     );
-  }
-
-  /// Enviar código de verificação por SMS para 2FA
-  Future<String> sendMFACode({
-    required String phoneNumber,
-  }) async {
-    final completer = Completer<String>();
-
-    try {
-      debugPrint(
-          '[AuthService] Iniciando verifyPhoneNumber para: $phoneNumber');
-      _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
-        verificationCompleted: (_) {
-          debugPrint('[AuthService] verificationCompleted - auto-verification');
-          if (!completer.isCompleted) {
-            completer.completeError(FirebaseAuthException(
-              code: 'auto-verification',
-              message: 'Verificação automática concluída. Aguarde o código.',
-            ));
-          }
-        },
-        verificationFailed: (FirebaseAuthException error) {
-          debugPrint(
-              '[AuthService] verificationFailed: ${error.code} - ${error.message}');
-          if (!completer.isCompleted) {
-            completer.completeError(error);
-          }
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          debugPrint(
-              '[AuthService] codeSent com verificationId: $verificationId');
-          if (!completer.isCompleted) {
-            completer.complete(verificationId);
-          }
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          debugPrint('[AuthService] codeAutoRetrievalTimeout');
-          if (!completer.isCompleted) {
-            completer.complete(verificationId);
-          }
-        },
-      );
-
-      return completer.future;
-    } on FirebaseAuthException {
-      debugPrint('[AuthService] FirebaseAuthException em sendMFACode');
-      rethrow;
-    } catch (e) {
-      debugPrint('[AuthService] Erro genérico em sendMFACode: ${e.toString()}');
-      if (!completer.isCompleted) {
-        completer.completeError(FirebaseAuthException(
-          code: 'sms-error',
-          message: 'Erro ao enviar SMS: ${e.toString()}',
-        ));
-      }
-      return completer.future;
-    }
-  }
-
-  /// Verificar código OTP durante 2FA (Reautenticação)
-  Future<UserCredential> verifyMFACode({
-    required String verificationId,
-    required String smsCode,
-  }) async {
-    final credential = PhoneAuthProvider.credential(
-      verificationId: verificationId,
-      smsCode: smsCode,
-    );
-
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw FirebaseAuthException(
-        code: 'user-not-signed-in',
-        message: 'Usuário precisa estar autenticado para verificar o código.',
-      );
-    }
-
-    return await user.reauthenticateWithCredential(credential);
-  }
-
-  /// Retorna se o usuário já possui Multi-Factor habilitado.
-  Future<bool> isMultiFactorEnabled(User user) async {
-    final factors = await user.multiFactor.getEnrolledFactors();
-    return factors.isNotEmpty;
   }
 
   Future<void> sendPasswordResetEmail({required String email}) {
@@ -282,7 +194,21 @@ class AuthService {
         'code=${error.code}, message=${error.message}',
       );
       debugPrintStack(stackTrace: stackTrace);
-      rethrow;
+
+      if (error.code == 'not-found' ||
+          error.code == 'unimplemented' ||
+          error.code == 'internal') {
+        throw Exception(
+          'A funcao "atualizarMfaStatus" nao esta disponivel no Firebase. '
+          'Publique as Cloud Functions (firebase deploy --only functions) e tente novamente.',
+        );
+      }
+
+      // Repassa a mensagem original (ex.: resource-exhausted = rate limit,
+      // unauthenticated, invalid-argument) para facilitar o diagnostico.
+      throw Exception(
+        error.message ?? 'Nao foi possivel atualizar a autenticacao 2FA.',
+      );
     }
   }
 
