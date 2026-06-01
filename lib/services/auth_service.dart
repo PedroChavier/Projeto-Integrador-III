@@ -87,7 +87,7 @@ class AuthService {
     } on FirebaseException catch (e) {
       debugPrint('[AuthService] getUserFullName permission error: '
           'code=${e.code}, message=${e.message}');
-      rethrow; //Relança a mesma exceção recebida 
+      rethrow; //Relança a mesma exceção recebida
 
     }
   }
@@ -117,7 +117,6 @@ class AuthService {
       return '$primeiroNome $ultimoNome';
     }
 
-    
     final restantesAbreviados =
         partes.skip(1).map((parte) => '${parte[0].toUpperCase()}.').join(' '); //skip(1) ignora o primeiro elemento
 
@@ -176,6 +175,86 @@ class AuthService {
     });
   }
 
+  // ─── 2FA — verificação OOB por e-mail ────────────────────────────────────
+
+  /// Envia o link de verificação OOB apontando para action.html,
+  /// que lê o parâmetro mode=verifyEmail e aplica o código separadamente
+  /// do fluxo de reset de senha (mode=resetPassword).
+  Future<void> enviarEmailVerificacao2FA() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Nenhum usuário autenticado.',
+      );
+    }
+
+    // Recarrega o estado do token antes de enviar para evitar cache desatualizado
+    await user.reload();
+
+    // ActionCodeSettings aponta para action.html que separa
+    // mode=verifyEmail de mode=resetPassword, evitando conflito entre os fluxos.
+    final actionSettings = ActionCodeSettings(
+      url: 'https://mesclainvest-34c45.web.app/action.html',
+      handleCodeInApp: false, // abre no browser, não no app
+    );
+
+    try {
+      await _auth.currentUser!.sendEmailVerification(actionSettings);
+    } on FirebaseAuthException catch (e, stackTrace) {
+      debugPrint(
+        '[AuthService] enviarEmailVerificacao2FA error: '
+        'code=${e.code}, message=${e.message}',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      throw Exception(_traduzirErroAuth(e.code));
+    }
+  }
+
+  /// Stream que emite [true] assim que o e-mail do usuário for verificado.
+  /// Faz polling a cada [intervalo] recarregando o token via [User.reload].
+  /// Emite [false] enquanto aguarda e para de emitir após confirmar ou se
+  /// o usuário for nulo.
+  Stream<bool> streamEmailVerificado({
+    Duration intervalo = const Duration(seconds: 4),
+  }) async* {
+    while (true) {
+      await Future<void>.delayed(intervalo);
+
+      final user = _auth.currentUser;
+      if (user == null) break;
+
+      try {
+        await user.reload();
+      } catch (e) {
+        // Erro de rede pontual — ignora e tenta no próximo tick
+        debugPrint('[AuthService] streamEmailVerificado reload error: $e');
+        yield false;
+        continue;
+      }
+
+      final verificado = _auth.currentUser?.emailVerified ?? false;
+
+      yield verificado;
+      if (verificado) break;
+    }
+  }
+
+  /// Traduz códigos de erro do FirebaseAuth para mensagens em português.
+  String _traduzirErroAuth(String code) {
+    const mapa = <String, String>{
+      'too-many-requests':
+          'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+      'user-not-found': 'Usuário não encontrado.',
+      'network-request-failed': 'Sem conexão com a internet.',
+      'invalid-email': 'Endereço de e-mail inválido.',
+      'user-disabled': 'Esta conta foi desativada.',
+    };
+    return mapa[code] ?? 'Erro ao enviar e-mail de verificação ($code).';
+  }
+
+  // ─── 2FA — status no Firestore via Cloud Function ─────────────────────────
+
   Future<void> updateCurrentUserMfaStatus(bool enabled) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -211,6 +290,8 @@ class AuthService {
       );
     }
   }
+
+  // ─── Saldo e transações ───────────────────────────────────────────────────
 
   //Adiciona saldo simulado via Cloud Function
   Future<void> creditCurrentUserSaldo(double valor) async {
@@ -297,13 +378,15 @@ class AuthService {
         .toList();
 
     transacoes.sort((a, b) {
-        if (a.createdAt == null && b.createdAt == null) return 0;
-        if (a.createdAt == null) return 1;
-        if (b.createdAt == null) return -1;
-        return b.createdAt!.compareTo(a.createdAt!);
-      });
+      if (a.createdAt == null && b.createdAt == null) return 0;
+      if (a.createdAt == null) return 1;
+      if (b.createdAt == null) return -1;
+      return b.createdAt!.compareTo(a.createdAt!);
+    });
     return transacoes;
   }
+
+  // ─── Perfil ───────────────────────────────────────────────────────────────
 
   //Garante que o usuario autenticado tenha um perfil no Firestore
   Future<UserProfile> ensureCurrentUserProfile() async {

@@ -1,21 +1,21 @@
-import 'dart:async'; //usado para o timer (contagem regressiva)
+//Giovana Uchelli - 25008818
+import 'dart:async'; // Timer — usado para o polling periódico
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; //usado para limitar a entrada so a numeros
+import 'package:firebase_auth/firebase_auth.dart'; // autenticação e verificação de e-mail
 
-import '../home/home_screen.dart';
+import '../home/home_screen.dart'; // tela para onde o usuário vai após verificar
+
 
 class Verificacao2FAScreen extends StatefulWidget {
   const Verificacao2FAScreen({
     super.key,
-    this.canal = 'SMS',
-    this.destinoMascarado = '',
-    this.onVerificado,
+    this.canal = 'e-mail',           // canal de envio exibido na tela ("e-mail", "SMS"...)
+    this.destinoMascarado = '',       // ex: "p***@gmail.com" — exibido na tela
+    this.onVerificado,                // se fornecido, é fluxo de ATIVAÇÃO; se nulo, é fluxo de LOGIN
   });
 
   final String canal;
   final String destinoMascarado;
-  /// Quando fornecido, indica fluxo de ativação de 2FA (não login).
-  /// Chamado após código válido; a tela é fechada com pop() em vez de ir para Home.
   final VoidCallback? onVerificado;
 
   @override
@@ -23,85 +23,74 @@ class Verificacao2FAScreen extends StatefulWidget {
 }
 
 class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
-  static const int _totalDigitos = 6; //quantidade de campos
-  static const int _tempoInicial = 50; //tempo inicial do contador
 
-  //controla o texto digitado em cada caixinha
-  final List<TextEditingController> _controllers =
-      List.generate(_totalDigitos, (_) => TextEditingController());
-  //controla o foco (qual caixinha esta ativa)
-  final List<FocusNode> _focusNodes =
-      List.generate(_totalDigitos, (_) => FocusNode());
+  // Polling a cada 4s; timeout de 5 minutos
+  static const Duration _intervalo       = Duration(seconds: 4);
+  static const int      _timeoutSegundos = 300;
 
-  int _segundosRestantes = _tempoInicial;
-  Timer? _timer; //timer que vai diminuindo o tempo
-  bool _isLoading = false;
+  Timer? _pollingTimer;       // timer que verifica periodicamente se o e-mail foi confirmado
+  int    _segundosPassados = 0;
+  bool   _verificado  = false; // true quando emailVerified == true
+  bool   _expirado    = false; // true quando passou os 5 minutos sem verificar
+  bool   _reenviando  = false; // true enquanto o reenvio do link está em andamento
 
   @override
   void initState() {
     super.initState();
-    _iniciarTimer();
-    //coloca o cursor automaticamente no primeiro campo
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNodes[0].requestFocus();
-    });
+    _iniciarPolling(); // começa a checar o Firebase assim que a tela abre
   }
 
-  void _iniciarTimer() {
-    _timer?.cancel(); //cancela o timer antigo
-    setState(() => _segundosRestantes = _tempoInicial); //reseta o tempo
+  // ─── Polling ──────────────────────────────────────────────────────────────
 
-    // a cada um segundo, diminui o tempo
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_segundosRestantes <= 1) {
-        t.cancel(); //para quando chega em 0
-        setState(() => _segundosRestantes = 0);
-      } else {
-        setState(() => _segundosRestantes--); //diminui 1 segundo
+  // Cria um Timer que dispara a cada 4s e checa se o usuário já clicou no link
+  void _iniciarPolling() {
+    _pollingTimer?.cancel(); // cancela qualquer timer anterior antes de criar um novo
+    setState(() {
+      _verificado       = false;
+      _expirado         = false;
+      _segundosPassados = 0;
+    });
+
+    _pollingTimer = Timer.periodic(_intervalo, (_) async {
+      if (!mounted) return; // widget foi destruído, não faz nada
+
+      _segundosPassados += _intervalo.inSeconds;
+
+      // Timeout atingido: para o polling e marca como expirado
+      if (_segundosPassados >= _timeoutSegundos) {
+        _pollingTimer?.cancel();
+        if (mounted) setState(() => _expirado = true);
+        return;
+      }
+
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) return;
+
+        // reload() força o Firebase a buscar o estado atual do usuário no servidor
+        // sem isso, emailVerified ficaria com o valor em cache (sempre false)
+        await user.reload();
+
+        final emailVerificado =
+            FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+
+        if (emailVerificado && mounted) {
+          _pollingTimer?.cancel();
+          setState(() => _verificado = true);
+          await _concluir(); // navega para a próxima tela
+        }
+      } catch (_) {
+        // Erro pontual de rede — ignora e tenta no próximo tick
       }
     });
   }
 
-  //chamado quando o usuario digita algo
-  void _onDigitChanged(int index, String value) {
-    //se digitou 1 numero, vai para a proxima caixa
-    if (value.length == 1 && index < _totalDigitos - 1) {
-      _focusNodes[index + 1].requestFocus();
+  // ─── Após confirmação ─────────────────────────────────────────────────────
 
-      //se apagou, volta para a anterior
-    } else if (value.isEmpty && index > 0) {
-      _focusNodes[index - 1].requestFocus();
-    }
-    setState(() {}); //atualiza o botao
-  }
-
-  //verifica se todas as caixas foram preenchidas
-  bool get _codigoCompleto => _controllers.every((c) => c.text.isNotEmpty);
-
-  void _voltarParaPaginaAnterior() {
-    FocusScope.of(context).unfocus();
-
-    if (_isLoading) return;
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  Future<void> _confirmar() async {
-    if (!_codigoCompleto || _isLoading) return;
-
-    setState(() => _isLoading = true);
-
-    // TODO(2FA): reimplementar a verificacao do codigo.
-    // O mecanismo anterior (Cloud Function 'verificarCodigoMfaCallable') foi
-    // removido; esta tela permanece apenas como shell de UI para ser refeita.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Verificacao 2FA ainda nao implementada.'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-
+  // Decide para onde ir após a verificação:
+  // fluxo de ativação → pop(true) de volta para quem chamou
+  // fluxo de login    → vai para a HomeScreen removendo toda a pilha de navegação
+  Future<void> _concluir() async {
     if (!mounted) return;
 
     if (widget.onVerificado != null) {
@@ -110,64 +99,77 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
     } else {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (route) => false,
+        (route) => false, // remove todas as rotas anteriores
       );
     }
   }
 
-  void _reenviar() {
-    //limpa todas as caixas
-    for (final c in _controllers) {
-      c.clear();
-    }
+  // ─── Reenviar link ────────────────────────────────────────────────────────
 
-    //volta o foco para a primeira caixa
-    _focusNodes[0].requestFocus();
-    _iniciarTimer();
-    setState(() {});
+  // Chama o Firebase para enviar um novo e-mail de verificação
+  // e reinicia o polling (zera o timeout)
+  Future<void> _reenviar() async {
+    if (_reenviando) return;
+    setState(() => _reenviando = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      await user?.sendEmailVerification();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Novo link enviado! Verifique seu e-mail.'),
+            backgroundColor: Colors.green[400],
+          ),
+        );
+        _iniciarPolling(); // reinicia o contador de 5 minutos
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao reenviar: $e'),
+            backgroundColor: Colors.red[400],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _reenviando = false);
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel(); //cancela o time ao sair da tela
-
-    //libera as memorias
-    for (final c in _controllers) c.dispose();
-    for (final f in _focusNodes) f.dispose();
+    _pollingTimer?.cancel(); // SEMPRE cancela o timer para não vazar memória
     super.dispose();
   }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: () async => !_isLoading,
+      onWillPop: () async => true, // permite voltar com o botão físico
       child: Scaffold(
         backgroundColor: Colors.white,
-
-      //barra superior com o botao voltar
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-
-        //botao voltar
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.black87),
-            onPressed: _isLoading ? null : _voltarParaPaginaAnterior,
+            onPressed: () => Navigator.of(context).pop(false), // false = não verificou
           ),
-
-        //linha colorida
+          // Linha decorativa de gradiente abaixo do AppBar
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(2),
             child: Container(
               height: 2,
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF6C63FF),
-                    Color(0xFFE040FB),
-                    Color(0xFFFF6B6B),
-                  ],
-                ),
+                gradient: LinearGradient(colors: [
+                  Color(0xFF6C63FF),
+                  Color(0xFFE040FB),
+                  Color(0xFFFF6B6B),
+                ]),
               ),
             ),
           ),
@@ -178,201 +180,18 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              // Titulo
-              const Text(
-                'Verificacao 2FA',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Passo 2 de 2',
-                style: TextStyle(fontSize: 14, color: Colors.black45),
-              ),
-              const SizedBox(height: 4),
-              const Divider(color: Color(0xFFEEEEEE)),
-              const SizedBox(height: 16),
-
-              // Banner informativo
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAE8FF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black87,
-                          height: 1.5,
-                        ),
-                        children: widget.onVerificado != null
-                            ? const [
-                                TextSpan(text: 'Confirmando seu acesso para '),
-                                TextSpan(
-                                  text: 'ativar o 2FA.',
-                                  style: TextStyle(
-                                    color: Color(0xFF6C63FF),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ]
-                            : const [
-                                TextSpan(text: 'Este usuario possui '),
-                                TextSpan(
-                                  text: '2FA ativado.',
-                                  style: TextStyle(
-                                    color: Color(0xFF6C63FF),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.onVerificado != null
-                          ? 'Insira o codigo recebido para confirmar que voce tem acesso ao contato cadastrado.'
-                          : 'A autenticacao multifator e opcional, desabilite em perfil se necessario',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black54,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 48),
-
-              // Instrucao + timer
-              Center(
-                child: Column(
-                  children: [
-                    const Text(
-                      'Digite o codigo enviado',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black45,
-                        ),
-                        children: [
-                          const TextSpan(text: 'o codigo expira em '),
-                          TextSpan(
-                            text: '${_segundosRestantes}s',
-                            style: const TextStyle(
-                              color: Color(0xFF6C63FF),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (widget.destinoMascarado.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Enviado por ${widget.canal} para ${widget.destinoMascarado}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black45,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              // Campos de digito
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(
-                  _totalDigitos,
-                  (i) => _DigitBox(
-                    controller: _controllers[i],
-                    focusNode: _focusNodes[i],
-                    onChanged: (v) => _onDigitChanged(i, v),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 36),
-
-              // Botao confirmar
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton(
-                    onPressed: _codigoCompleto && !_isLoading ? _confirmar : null,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: _codigoCompleto && !_isLoading
-                            ? Colors.black87
-                            : Colors.black26,
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.black87,
-                              ),
-                            ),
-                          )
-                        : Text(
-                            widget.onVerificado != null ? 'Confirmar' : 'Confirmar e entrar',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: _codigoCompleto
-                                  ? Colors.black87
-                                  : Colors.black38,
-                            ),
-                          ),
-                  ),
-                ),
+                _buildHeader(),
                 const SizedBox(height: 16),
+                _buildInfoBanner(),
+                const SizedBox(height: 48),
+                _buildStatusArea(),
+                const SizedBox(height: 36),
 
-                // Reenviar codigo
-                Center(
-                  child: GestureDetector(
-                    onTap: _isLoading ? null : _reenviar,
-                    child: Text(
-                      'Reenviar Codigo',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _isLoading
-                            ? Colors.black26
-                            : const Color(0xFF6C63FF),
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                ),
+                // Botão grande de reenvio — aparece só quando expirado
+                if (_expirado) _buildBotaoReenviar(),
+
+                // Link discreto de reenvio — aparece enquanto ainda está aguardando
+                if (!_expirado && !_verificado) _buildAguardandoInfo(),
               ],
             ),
           ),
@@ -380,69 +199,228 @@ class _Verificacao2FAScreenState extends State<Verificacao2FAScreen> {
       ),
     );
   }
+
+  // Título + subtítulo + divisor
+  Widget _buildHeader() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Verificação 2FA',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Subtítulo muda conforme o fluxo: ativação ou login
+          Text(
+            widget.onVerificado != null ? 'Ativando proteção extra' : 'Passo 2 de 2',
+            style: const TextStyle(fontSize: 14, color: Colors.black45),
+          ),
+          const SizedBox(height: 4),
+          const Divider(color: Color(0xFFEEEEEE)),
+        ],
+      );
+
+  // Banner roxo claro com instrução sobre o que o usuário deve fazer
+  Widget _buildInfoBanner() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAE8FF),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // RichText permite misturar estilos diferentes na mesma linha
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                    fontSize: 13, color: Colors.black87, height: 1.5),
+                children: widget.onVerificado != null
+                    ? const [
+                        TextSpan(text: 'Confirmando para '),
+                        TextSpan(
+                          text: 'ativar o 2FA.',
+                          style: TextStyle(
+                            color: Color(0xFF6C63FF),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ]
+                    : const [
+                        TextSpan(text: 'Usuário com '),
+                        TextSpan(
+                          text: '2FA ativo.',
+                          style: TextStyle(
+                            color: Color(0xFF6C63FF),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Clique no link enviado para o seu e-mail. Esta tela confirma automaticamente assim que o link for aberto.',
+              style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.4),
+            ),
+          ],
+        ),
+      );
+
+  // Ícone central + texto de status — muda conforme o estado atual
+  Widget _buildStatusArea() => Center(
+        child: Column(
+          children: [
+            // AnimatedSwitcher troca o ícone com uma animação suave de fade
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: _verificado
+                  ? const Icon(Icons.check_circle_outline,
+                      key: ValueKey('ok'),
+                      size: 72,
+                      color: Color(0xFF6C63FF))    // ✓ verde roxo — verificado
+                  : _expirado
+                      ? const Icon(Icons.timer_off_outlined,
+                          key: ValueKey('exp'),
+                          size: 72,
+                          color: Colors.red)        // ✗ vermelho — expirado
+                      : const _PulsingIcon(key: ValueKey('pulse')), // pulsando — aguardando
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _verificado
+                  ? 'E-mail verificado!'
+                  : _expirado
+                      ? 'Tempo esgotado'
+                      : 'Aguardando verificação…',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: _expirado ? Colors.red : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Exibe o destino mascarado enquanto aguarda (ex: "p***@gmail.com")
+            if (!_verificado && !_expirado && widget.destinoMascarado.isNotEmpty)
+              Text(
+                'Link enviado por ${widget.canal} para ${widget.destinoMascarado}',
+                style: const TextStyle(fontSize: 13, color: Colors.black45),
+                textAlign: TextAlign.center,
+              ),
+
+            if (_expirado)
+              const Text(
+                'O link expirou. Reenvie para tentar novamente.',
+                style: TextStyle(fontSize: 13, color: Colors.black45),
+                textAlign: TextAlign.center,
+              ),
+          ],
+        ),
+      );
+
+  // Link discreto de reenvio — visível enquanto ainda está no prazo
+  Widget _buildAguardandoInfo() => Center(
+        child: Column(
+          children: [
+            const Text(
+              'Não recebeu o e-mail?',
+              style: TextStyle(fontSize: 14, color: Colors.black45),
+            ),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _reenviando ? null : _reenviar,
+              child: Text(
+                _reenviando ? 'Reenviando…' : 'Reenviar link',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _reenviando ? Colors.black26 : const Color(0xFF6C63FF),
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  // Botão grande de reenvio — visível apenas quando o tempo expirou
+  Widget _buildBotaoReenviar() => SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: OutlinedButton(
+          onPressed: _reenviando ? null : _reenviar,
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Colors.black87, width: 1.5),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+          ),
+          child: _reenviando
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text(
+                  'Reenviar link de verificação',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+        ),
+      );
 }
 
-//  Caixa de digito
-class _DigitBox extends StatelessWidget {
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final ValueChanged<String> onChanged;
+// ─── Ícone pulsante enquanto aguarda ──────────────────────────────────────────
 
-  const _DigitBox({
-    required this.controller,
-    required this.focusNode,
-    required this.onChanged,
-  });
+// Widget separado porque precisa do próprio AnimationController (StatefulWidget)
+class _PulsingIcon extends StatefulWidget {
+  const _PulsingIcon({super.key});
+
+  @override
+  State<_PulsingIcon> createState() => _PulsingIconState();
+}
+
+class _PulsingIconState extends State<_PulsingIcon>
+    with SingleTickerProviderStateMixin { // necessário para usar AnimationController
+
+  late final AnimationController _ctrl;
+  late final Animation<double>   _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true); // vai de 0.92 → 1.08 → 0.92 → ... infinitamente
+
+    // Escala oscila entre 92% e 108% com easing suave
+    _scale = Tween<double>(begin: 0.92, end: 1.08).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose(); // libera o controller para não vazar memória
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final hasValue = controller.text.isNotEmpty;
-
-    return SizedBox(
-      width: 52,
-      height: 58,
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        onChanged: onChanged,
-        textAlign: TextAlign.center,
-        keyboardType: TextInputType.number,
-        maxLength: 1,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly], //so numeros
-        style: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-          color: Colors.black87,
-        ),
-        decoration: InputDecoration(
-          counterText: '', //remove o contador de caracteres
-          contentPadding:
-              EdgeInsets.zero, // remove espaco interno padrao (deixa mais compacto)
-
-          //bordas da caixinha
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-              color: hasValue ? Colors.green : const Color(0xFFDDDDDD),
-            ),
-          ),
-
-          //borda quando NAO esta selecionado
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-              color: hasValue ? Colors.green : const Color(0xFFDDDDDD),
-            ),
-          ),
-
-          //borda quando o usuario clica na caixa
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 1.5),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
+    return ScaleTransition(
+      scale: _scale, // aplica a animação de escala no ícone
+      child: const Icon(
+        Icons.mark_email_unread_outlined,
+        size: 72,
+        color: Color(0xFF6C63FF),
       ),
     );
   }
