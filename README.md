@@ -5,10 +5,7 @@ Projeto desenvolvido para a disciplina **Projeto Integrador 3**.
 ---
 ## Integrantes - Grupo 2
 
-- Demétrius Valverde Ferreira Corradi Junqueira — 25015035  
 - Giovana Uchelli — 25008818  
-- Lucas Kendi Panini Hosikawa — 25014845  
-- Matheus Rosini Borges de Sales — 25015832  
 - Pedro Andre do Carmo Chavier — 25018639  
 
 ---
